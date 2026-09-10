@@ -93,6 +93,26 @@ export async function getTeamMembership(teamId: string): Promise<TeamRole | null
   throw new Error('Team membership returned an invalid role.')
 }
 
+export async function getTeamMemberIdForUser(
+  teamId: string,
+  userId: string,
+): Promise<string | null> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('team_members')
+    .select('id')
+    .eq('team_id', teamId)
+    .eq('user_id', userId)
+    .eq('status', 'ACTIVE')
+    .maybeSingle()
+
+  if (error) {
+    throw new Error('Could not load team member.')
+  }
+
+  return typeof data?.id === 'string' ? data.id : null
+}
+
 export async function setLastActiveTeam(teamId: string): Promise<void> {
   const supabase = await createClient()
   const { error } = await supabase.rpc('set_last_active_team', {
