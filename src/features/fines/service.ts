@@ -6,6 +6,7 @@ import {
   createCustomFineSchema,
   createRuleFineSchema,
 } from './schemas'
+import type { FineEvent, FineStatus, FineSummary } from './types'
 
 type RuleFineInput = {
   teamId: string
@@ -31,6 +32,11 @@ type CancelFineInput = {
   reason: string
 }
 
+export type ActivePlayer = {
+  teamMemberId: string
+  name: string
+}
+
 function stableFineError(message?: string) {
   if (message?.includes('INSUFFICIENT_PERMISSION')) return new Error('INSUFFICIENT_PERMISSION')
   if (message?.includes('INVALID_RULE')) return new Error('INVALID_RULE')
@@ -39,7 +45,42 @@ function stableFineError(message?: string) {
   if (message?.includes('INVALID_CUSTOM_FINE')) return new Error('INVALID_CUSTOM_FINE')
   if (message?.includes('INVALID_FINE_STATE')) return new Error('FINE_STATE_CHANGED')
   if (message?.includes('FINE_NOT_FOUND')) return new Error('FINE_NOT_FOUND')
+  if (message?.includes('FINE_ACCESS_DENIED')) return new Error('FINE_ACCESS_DENIED')
+  if (message?.includes('TEAM_ACCESS_DENIED')) return new Error('TEAM_ACCESS_DENIED')
   return new Error('FINE_OPERATION_FAILED')
+}
+
+function mapFineRow(row: Record<string, unknown>): FineSummary {
+  return {
+    id: String(row.fine_id),
+    teamId: String(row.team_id),
+    playerTeamMemberId: String(row.player_team_member_id),
+    playerName: String(row.player_name),
+    reason: String(row.reason),
+    originalAmountMinor: String(row.original_amount_minor),
+    currentAmountMinor: String(row.current_amount_minor),
+    status: row.status as FineStatus,
+    createdAt: String(row.created_at),
+    nextDoublingAt:
+      typeof row.next_doubling_at === 'string' ? row.next_doubling_at : null,
+  }
+}
+
+function mapFineEvent(row: Record<string, unknown>): FineEvent {
+  return {
+    id: String(row.event_id),
+    type: row.type as FineEvent['type'],
+    actorUserId: typeof row.actor_user_id === 'string' ? row.actor_user_id : null,
+    previousAmountMinor:
+      row.previous_amount_minor == null ? null : String(row.previous_amount_minor),
+    newAmountMinor: row.new_amount_minor == null ? null : String(row.new_amount_minor),
+    scheduledAt: typeof row.scheduled_at === 'string' ? row.scheduled_at : null,
+    metadata:
+      row.metadata && typeof row.metadata === 'object'
+        ? (row.metadata as Record<string, unknown>)
+        : {},
+    createdAt: String(row.created_at),
+  }
 }
 
 export async function createRuleFine(input: RuleFineInput): Promise<string> {
@@ -109,4 +150,52 @@ export async function cancelFine(input: CancelFineInput): Promise<void> {
     p_reason: reason,
   })
   if (error) throw stableFineError(error.message)
+}
+
+export async function listTeamFines(teamId: string): Promise<FineSummary[]> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('list_team_fines', {
+    p_team_id: teamId,
+  })
+
+  if (error) throw stableFineError(error.message)
+  if (!Array.isArray(data)) return []
+  return data.map((row) => mapFineRow(row as Record<string, unknown>))
+}
+
+export async function getFine(fineId: string): Promise<FineSummary | null> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('get_fine_detail', {
+    p_fine_id: fineId,
+  })
+
+  if (error) throw stableFineError(error.message)
+  if (!Array.isArray(data) || data.length === 0) return null
+  return mapFineRow(data[0] as Record<string, unknown>)
+}
+
+export async function listFineEvents(fineId: string): Promise<FineEvent[]> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('list_fine_events', {
+    p_fine_id: fineId,
+  })
+
+  if (error) throw stableFineError(error.message)
+  if (!Array.isArray(data)) return []
+  return data.map((row) => mapFineEvent(row as Record<string, unknown>))
+}
+
+export async function listActivePlayers(teamId: string): Promise<ActivePlayer[]> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('list_active_season_players', {
+    p_team_id: teamId,
+  })
+
+  if (error) throw stableFineError(error.message)
+  if (!Array.isArray(data)) return []
+
+  return data.map((row) => ({
+    teamMemberId: String(row.team_member_id),
+    name: String(row.player_name),
+  }))
 }
