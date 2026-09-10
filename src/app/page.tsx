@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 
+import { listMyPendingInvitations } from '@/features/invitations/service'
 import {
   getLastActiveTeamId,
   listMyTeams,
@@ -12,6 +13,12 @@ export default async function HomePage() {
   const teams = await listMyTeams()
 
   if (teams.length === 0) {
+    const invitations = await listMyPendingInvitations()
+
+    if (invitations.length > 0) {
+      redirect('/invitations')
+    }
+
     redirect('/teams/new')
   }
 
