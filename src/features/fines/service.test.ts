@@ -8,6 +8,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }))
 
 import {
+  acceptFineDispute,
   adjustFine,
   cancelFine,
   createCustomFine,
@@ -17,6 +18,8 @@ import {
   listFineEvents,
   listTeamFines,
   markFinePaid,
+  openFineDispute,
+  rejectFineDispute,
 } from './service'
 
 describe('fine service', () => {
@@ -102,6 +105,48 @@ describe('fine service', () => {
     expect(rpc).toHaveBeenCalledWith('cancel_fine', {
       p_fine_id: fineId,
       p_reason: 'Training cancelled',
+    })
+  })
+
+  it('opens a fine dispute through the locked dispute RPC', async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: null })
+    const fineId = '44444444-4444-4444-8444-444444444447'
+
+    await expect(
+      openFineDispute({ fineId, reason: 'Training started later than scheduled' }),
+    ).resolves.toBeUndefined()
+
+    expect(rpc).toHaveBeenCalledWith('open_fine_dispute', {
+      p_fine_id: fineId,
+      p_reason: 'Training started later than scheduled',
+    })
+  })
+
+  it('accepts a fine dispute through the staff resolution RPC', async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: null })
+    const fineId = '44444444-4444-4444-8444-444444444448'
+
+    await expect(
+      acceptFineDispute({ fineId, reason: 'Player evidence accepted' }),
+    ).resolves.toBeUndefined()
+
+    expect(rpc).toHaveBeenCalledWith('accept_fine_dispute', {
+      p_fine_id: fineId,
+      p_reason: 'Player evidence accepted',
+    })
+  })
+
+  it('rejects a fine dispute through the staff resolution RPC', async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: null })
+    const fineId = '44444444-4444-4444-8444-444444444449'
+
+    await expect(
+      rejectFineDispute({ fineId, reason: 'Attendance log confirms the fine' }),
+    ).resolves.toBeUndefined()
+
+    expect(rpc).toHaveBeenCalledWith('reject_fine_dispute', {
+      p_fine_id: fineId,
+      p_reason: 'Attendance log confirms the fine',
     })
   })
 
