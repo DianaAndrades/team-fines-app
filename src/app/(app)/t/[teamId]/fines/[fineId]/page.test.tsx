@@ -1,23 +1,41 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getFine, getTeamMembership, listFineEvents, listMyTeams, notFound } = vi.hoisted(() => ({
+const {
+  getFine,
+  getTeamMemberIdForUser,
+  getTeamMembership,
+  listFineEvents,
+  listMyTeams,
+  notFound,
+  requireUser,
+} = vi.hoisted(() => ({
   getFine: vi.fn(),
+  getTeamMemberIdForUser: vi.fn(),
   getTeamMembership: vi.fn(),
   listFineEvents: vi.fn(),
   listMyTeams: vi.fn(),
   notFound: vi.fn(() => {
     throw new Error('NOT_FOUND')
   }),
+  requireUser: vi.fn(),
 }))
 
 vi.mock('next/navigation', () => ({ notFound }))
+vi.mock('@/lib/auth/current-user', () => ({ requireUser }))
 vi.mock('@/features/fines/service', () => ({ getFine, listFineEvents }))
-vi.mock('@/features/teams/service', () => ({ getTeamMembership, listMyTeams }))
+vi.mock('@/features/teams/service', () => ({
+  getTeamMemberIdForUser,
+  getTeamMembership,
+  listMyTeams,
+}))
 vi.mock('@/features/fines/actions', () => ({
   markFinePaidAction: vi.fn(),
   adjustFineAction: vi.fn(),
   cancelFineAction: vi.fn(),
+  openFineDisputeAction: vi.fn(),
+  acceptFineDisputeAction: vi.fn(),
+  rejectFineDisputeAction: vi.fn(),
 }))
 
 import FineDetailPage from './page'
@@ -57,12 +75,16 @@ function renderPage() {
 describe('FineDetailPage', () => {
   beforeEach(() => {
     getFine.mockReset()
+    getTeamMemberIdForUser.mockReset()
     getTeamMembership.mockReset()
     listFineEvents.mockReset()
     listMyTeams.mockReset()
+    requireUser.mockReset()
     notFound.mockClear()
 
+    requireUser.mockResolvedValue({ id: 'user-1' })
     getFine.mockResolvedValue(pendingFine)
+    getTeamMemberIdForUser.mockResolvedValue(null)
     listFineEvents.mockResolvedValue(events)
     listMyTeams.mockResolvedValue([
       { id: 'team-1', name: 'FC Example', currencyCode: 'EUR', role: 'COACH' },
@@ -84,18 +106,41 @@ describe('FineDetailPage', () => {
     expect(screen.getByRole('button', { name: /cancel fine/i })).toBeInTheDocument()
   })
 
-  it('shows the fine to players without staff controls', async () => {
+  it('lets the fined player dispute their own pending fine', async () => {
     getTeamMembership.mockResolvedValue('PLAYER')
+    getTeamMemberIdForUser.mockResolvedValue('member-1')
 
     render(await renderPage())
 
-    expect(screen.getByText('Late to training')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /dispute fine/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/why are you disputing/i)).toHaveAttribute('name', 'reason')
+    expect(screen.queryByRole('button', { name: /mark paid/i })).not.toBeInTheDocument()
+  })
+
+  it('does not let another player dispute somebody else’s fine', async () => {
+    getTeamMembership.mockResolvedValue('PLAYER')
+    getTeamMemberIdForUser.mockResolvedValue('member-2')
+
+    render(await renderPage())
+
+    expect(screen.queryByRole('button', { name: /dispute fine/i })).not.toBeInTheDocument()
+  })
+
+  it('lets staff accept or reject a disputed fine and hides pending-fine mutations', async () => {
+    getTeamMembership.mockResolvedValue('COACH')
+    getFine.mockResolvedValue({ ...pendingFine, status: 'DISPUTED', nextDoublingAt: null })
+
+    render(await renderPage())
+
+    expect(screen.getByText('Disputed')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /accept dispute/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /reject dispute/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /mark paid/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /adjust amount/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /cancel fine/i })).not.toBeInTheDocument()
   })
 
-  it('hides mutation controls when the fine is no longer pending', async () => {
+  it('hides mutation controls when the fine is paid', async () => {
     getTeamMembership.mockResolvedValue('COACH')
     getFine.mockResolvedValue({ ...pendingFine, status: 'PAID', nextDoublingAt: null })
 
@@ -105,5 +150,6 @@ describe('FineDetailPage', () => {
     expect(screen.queryByRole('button', { name: /mark paid/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /adjust amount/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /cancel fine/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /accept dispute/i })).not.toBeInTheDocument()
   })
 })
