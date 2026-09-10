@@ -32,6 +32,8 @@ revoke execute on function public.handle_new_user() from public, anon, authentic
 
 create type public.team_role as enum ('OWNER', 'COACH', 'PLAYER');
 create type public.member_status as enum ('ACTIVE', 'REMOVED');
+create type public.invitation_role as enum ('COACH', 'PLAYER');
+create type public.invitation_status as enum ('PENDING', 'ACCEPTED', 'EXPIRED', 'CANCELLED');
 
 create table public.teams (
   id uuid primary key default gen_random_uuid(),
@@ -72,6 +74,25 @@ create table public.seasons (
 create unique index seasons_one_active_per_team
 on public.seasons(team_id)
 where is_active;
+
+create table public.team_invitations (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid not null references public.teams(id) on delete cascade,
+  email_normalized text not null check (
+    email_normalized = lower(trim(email_normalized))
+    and length(email_normalized) > 3
+  ),
+  role public.invitation_role not null,
+  invited_by uuid not null references public.profiles(id),
+  status public.invitation_status not null default 'PENDING',
+  expires_at timestamptz not null default (now() + interval '7 days'),
+  accepted_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create unique index one_pending_invite_per_team_email
+on public.team_invitations(team_id, email_normalized)
+where status = 'PENDING';
 
 alter table public.profiles
 add column last_active_team_id uuid references public.teams(id) on delete set null;
@@ -212,16 +233,262 @@ begin
 end;
 $$;
 
+create or replace function public.invite_team_member(
+  p_team_id uuid,
+  p_email text,
+  p_role public.invitation_role
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_email text := lower(trim(p_email));
+  v_invitation_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'UNAUTHENTICATED' using errcode = '42501';
+  end if;
+
+  if not public.is_team_staff(p_team_id) then
+    raise exception 'TEAM_STAFF_REQUIRED' using errcode = '42501';
+  end if;
+
+  if v_email = '' or position('@' in v_email) <= 1 then
+    raise exception 'INVALID_EMAIL' using errcode = '22023';
+  end if;
+
+  if exists (
+    select 1
+    from public.profiles p
+    join public.team_members tm on tm.user_id = p.id
+    where tm.team_id = p_team_id
+      and tm.status = 'ACTIVE'
+      and lower(trim(p.email)) = v_email
+  ) then
+    raise exception 'ALREADY_MEMBER' using errcode = '23505';
+  end if;
+
+  update public.team_invitations
+  set status = 'EXPIRED'
+  where team_id = p_team_id
+    and email_normalized = v_email
+    and status = 'PENDING'
+    and expires_at <= now();
+
+  if exists (
+    select 1
+    from public.team_invitations i
+    where i.team_id = p_team_id
+      and i.email_normalized = v_email
+      and i.status = 'PENDING'
+  ) then
+    raise exception 'INVITATION_ALREADY_PENDING' using errcode = '23505';
+  end if;
+
+  insert into public.team_invitations(
+    team_id,
+    email_normalized,
+    role,
+    invited_by
+  )
+  values (
+    p_team_id,
+    v_email,
+    p_role,
+    auth.uid()
+  )
+  returning id into v_invitation_id;
+
+  return v_invitation_id;
+end;
+$$;
+
+create or replace function public.accept_team_invitation(p_invitation_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_invitation public.team_invitations%rowtype;
+  v_email text := lower(coalesce(auth.jwt() ->> 'email', ''));
+begin
+  if auth.uid() is null then
+    raise exception 'UNAUTHENTICATED' using errcode = '42501';
+  end if;
+
+  select *
+  into v_invitation
+  from public.team_invitations
+  where id = p_invitation_id
+  for update;
+
+  if not found then
+    raise exception 'INVITATION_NOT_FOUND' using errcode = '22023';
+  end if;
+
+  if v_invitation.status <> 'PENDING' then
+    raise exception 'INVITATION_NOT_PENDING' using errcode = '22023';
+  end if;
+
+  if v_invitation.expires_at <= now() then
+    raise exception 'INVITATION_EXPIRED' using errcode = '22023';
+  end if;
+
+  if v_email = '' or v_email <> v_invitation.email_normalized then
+    raise exception 'INVITATION_EMAIL_MISMATCH' using errcode = '42501';
+  end if;
+
+  if exists (
+    select 1
+    from public.team_members tm
+    where tm.team_id = v_invitation.team_id
+      and tm.user_id = auth.uid()
+      and tm.status = 'ACTIVE'
+  ) then
+    raise exception 'ALREADY_MEMBER' using errcode = '23505';
+  end if;
+
+  insert into public.team_members(team_id, user_id, role, status)
+  values (
+    v_invitation.team_id,
+    auth.uid(),
+    v_invitation.role::text::public.team_role,
+    'ACTIVE'
+  );
+
+  update public.team_invitations
+  set status = 'ACCEPTED', accepted_at = now()
+  where id = v_invitation.id;
+
+  update public.profiles
+  set last_active_team_id = v_invitation.team_id
+  where id = auth.uid();
+
+  return v_invitation.team_id;
+end;
+$$;
+
+create or replace function public.cancel_team_invitation(p_invitation_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_invitation public.team_invitations%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'UNAUTHENTICATED' using errcode = '42501';
+  end if;
+
+  select *
+  into v_invitation
+  from public.team_invitations
+  where id = p_invitation_id
+  for update;
+
+  if not found then
+    raise exception 'INVITATION_NOT_FOUND' using errcode = '22023';
+  end if;
+
+  if not public.is_team_staff(v_invitation.team_id) then
+    raise exception 'TEAM_STAFF_REQUIRED' using errcode = '42501';
+  end if;
+
+  if v_invitation.status <> 'PENDING' then
+    raise exception 'INVITATION_NOT_PENDING' using errcode = '22023';
+  end if;
+
+  update public.team_invitations
+  set status = 'CANCELLED'
+  where id = p_invitation_id;
+end;
+$$;
+
+create or replace function public.resend_team_invitation(p_invitation_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_invitation public.team_invitations%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'UNAUTHENTICATED' using errcode = '42501';
+  end if;
+
+  select *
+  into v_invitation
+  from public.team_invitations
+  where id = p_invitation_id
+  for update;
+
+  if not found then
+    raise exception 'INVITATION_NOT_FOUND' using errcode = '22023';
+  end if;
+
+  if not public.is_team_staff(v_invitation.team_id) then
+    raise exception 'TEAM_STAFF_REQUIRED' using errcode = '42501';
+  end if;
+
+  if v_invitation.status <> 'PENDING' then
+    raise exception 'INVITATION_NOT_PENDING' using errcode = '22023';
+  end if;
+
+  update public.team_invitations
+  set expires_at = now() + interval '7 days'
+  where id = p_invitation_id;
+end;
+$$;
+
+create or replace function public.list_my_pending_invitations()
+returns table (
+  invitation_id uuid,
+  team_id uuid,
+  team_name text,
+  role public.invitation_role,
+  expires_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select i.id, i.team_id, t.name, i.role, i.expires_at
+  from public.team_invitations i
+  join public.teams t on t.id = i.team_id
+  where i.status = 'PENDING'
+    and i.expires_at > now()
+    and i.email_normalized = lower(coalesce(auth.jwt() ->> 'email', ''))
+  order by i.created_at, i.id;
+$$;
+
 revoke execute on function public.create_team_with_owner(text, text, text) from public, anon;
 revoke execute on function public.list_my_teams() from public, anon;
 revoke execute on function public.set_last_active_team(uuid) from public, anon;
+revoke execute on function public.invite_team_member(uuid, text, public.invitation_role) from public, anon;
+revoke execute on function public.accept_team_invitation(uuid) from public, anon;
+revoke execute on function public.cancel_team_invitation(uuid) from public, anon;
+revoke execute on function public.resend_team_invitation(uuid) from public, anon;
+revoke execute on function public.list_my_pending_invitations() from public, anon;
+
 grant execute on function public.create_team_with_owner(text, text, text) to authenticated;
 grant execute on function public.list_my_teams() to authenticated;
 grant execute on function public.set_last_active_team(uuid) to authenticated;
+grant execute on function public.invite_team_member(uuid, text, public.invitation_role) to authenticated;
+grant execute on function public.accept_team_invitation(uuid) to authenticated;
+grant execute on function public.cancel_team_invitation(uuid) to authenticated;
+grant execute on function public.resend_team_invitation(uuid) to authenticated;
+grant execute on function public.list_my_pending_invitations() to authenticated;
 
 alter table public.teams enable row level security;
 alter table public.team_members enable row level security;
 alter table public.seasons enable row level security;
+alter table public.team_invitations enable row level security;
 
 create policy "profile self read"
 on public.profiles for select
@@ -265,14 +532,30 @@ on public.seasons for select
 to authenticated
 using (public.is_team_member(team_id));
 
+create policy "staff read team invitations"
+on public.team_invitations for select
+to authenticated
+using (public.is_team_staff(team_id));
+
+create policy "invitees read own pending invitations"
+on public.team_invitations for select
+to authenticated
+using (
+  status = 'PENDING'
+  and expires_at > now()
+  and email_normalized = lower(coalesce(auth.jwt() ->> 'email', ''))
+);
+
 revoke all on public.profiles from anon;
 revoke all on public.teams from anon;
 revoke all on public.team_members from anon;
 revoke all on public.seasons from anon;
+revoke all on public.team_invitations from anon;
 
 revoke insert, update, delete on public.teams from authenticated;
 revoke insert, update, delete on public.team_members from authenticated;
 revoke insert, update, delete on public.seasons from authenticated;
+revoke insert, update, delete on public.team_invitations from authenticated;
 revoke update on public.profiles from authenticated;
 
 grant select on public.profiles to authenticated;
@@ -280,3 +563,4 @@ grant update(display_name, avatar_url) on public.profiles to authenticated;
 grant select on public.teams to authenticated;
 grant select on public.team_members to authenticated;
 grant select on public.seasons to authenticated;
+grant select on public.team_invitations to authenticated;
