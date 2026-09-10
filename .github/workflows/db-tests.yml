@@ -1,0 +1,36 @@
+name: Database checks
+
+on:
+  push:
+    branches:
+      - feat/mvp-foundation
+    paths:
+      - 'supabase/**'
+      - '.github/workflows/db-tests.yml'
+
+jobs:
+  db:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile --ignore-scripts
+
+      - name: Start Supabase
+        run: ./node_modules/.bin/supabase start
+
+      - name: Reset database
+        run: ./node_modules/.bin/supabase db reset
+
+      - name: Run database tests
+        run: ./node_modules/.bin/supabase test db
