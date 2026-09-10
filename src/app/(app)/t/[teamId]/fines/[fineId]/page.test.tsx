@@ -76,7 +76,7 @@ describe('FineDetailPage', () => {
 
     expect(screen.getByRole('heading', { name: 'Alex' })).toBeInTheDocument()
     expect(screen.getByText('Late to training')).toBeInTheDocument()
-    expect(screen.getByText('EUR 5.00')).toBeInTheDocument()
+    expect(screen.getByText('Current amount').parentElement).toHaveTextContent('EUR 5.00')
     expect(screen.getByText('Pending')).toBeInTheDocument()
     expect(screen.getByText('Fine created')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /mark paid/i })).toBeInTheDocument()
