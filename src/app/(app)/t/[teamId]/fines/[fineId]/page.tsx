@@ -4,12 +4,20 @@ import { FineStatusChip } from '@/components/fines/fine-status-chip'
 import { FineTimeline } from '@/components/fines/fine-timeline'
 import { formatFineAmount } from '@/components/fines/fine-card'
 import {
+  acceptFineDisputeAction,
   adjustFineAction,
   cancelFineAction,
   markFinePaidAction,
+  openFineDisputeAction,
+  rejectFineDisputeAction,
 } from '@/features/fines/actions'
 import { getFine, listFineEvents } from '@/features/fines/service'
-import { getTeamMembership, listMyTeams } from '@/features/teams/service'
+import { requireUser } from '@/lib/auth/current-user'
+import {
+  getTeamMemberIdForUser,
+  getTeamMembership,
+  listMyTeams,
+} from '@/features/teams/service'
 
 function formatDeadline(value: string) {
   return new Intl.DateTimeFormat('en-GB', {
@@ -29,6 +37,7 @@ export default async function FineDetailPage({
   params: Promise<{ teamId: string; fineId: string }>
 }) {
   const { teamId, fineId } = await params
+  const user = await requireUser()
   const [fine, role, teams] = await Promise.all([
     getFine(fineId),
     getTeamMembership(teamId),
@@ -44,12 +53,25 @@ export default async function FineDetailPage({
     notFound()
   }
 
-  const events = await listFineEvents(fineId)
+  const [events, currentTeamMemberId] = await Promise.all([
+    listFineEvents(fineId),
+    role === 'PLAYER' ? getTeamMemberIdForUser(teamId, user.id) : Promise.resolve(null),
+  ])
+
   const isStaff = role === 'OWNER' || role === 'COACH'
   const canMutate = isStaff && fine.status === 'PENDING'
+  const canOpenDispute =
+    role === 'PLAYER' &&
+    fine.status === 'PENDING' &&
+    currentTeamMemberId === fine.playerTeamMemberId
+  const canResolveDispute = isStaff && fine.status === 'DISPUTED'
+
   const markPaid = markFinePaidAction.bind(null, teamId, fineId)
   const adjust = adjustFineAction.bind(null, teamId, fineId)
   const cancel = cancelFineAction.bind(null, teamId, fineId)
+  const openDispute = openFineDisputeAction.bind(null, teamId, fineId)
+  const acceptDispute = acceptFineDisputeAction.bind(null, teamId, fineId)
+  const rejectDispute = rejectFineDisputeAction.bind(null, teamId, fineId)
 
   return (
     <section className="mx-auto w-full max-w-4xl space-y-6">
@@ -97,7 +119,47 @@ export default async function FineDetailPage({
             </p>
           </div>
         ) : null}
+
+        {fine.status === 'DISPUTED' ? (
+          <div className="mt-6 rounded-xl border border-purple-400/20 bg-purple-400/5 px-4 py-3">
+            <p className="text-sm font-medium text-purple-100">Doubling timer paused during dispute review.</p>
+          </div>
+        ) : null}
       </div>
+
+      {canOpenDispute ? (
+        <section aria-labelledby="dispute-heading" className="rounded-2xl border border-purple-400/20 bg-[#15181D] p-5">
+          <p className="text-xs font-medium uppercase tracking-[0.16em] text-purple-200">Your fine</p>
+          <h2 id="dispute-heading" className="mt-1 text-xl font-semibold text-[#F5F7FA]">
+            Dispute this fine
+          </h2>
+          <p className="mt-2 text-sm text-[#8B949E]">
+            The doubling timer will pause while staff reviews your reason.
+          </p>
+          <form action={openDispute} className="mt-4 space-y-3">
+            <div>
+              <label htmlFor="disputeReason" className="text-sm font-medium text-[#F5F7FA]">
+                Why are you disputing this fine?
+              </label>
+              <textarea
+                id="disputeReason"
+                name="reason"
+                rows={4}
+                minLength={3}
+                maxLength={1000}
+                required
+                className="mt-2 w-full rounded-xl border border-[#252A31] bg-[#0B0D10] px-3 py-2 text-[#F5F7FA] outline-none focus:border-purple-400"
+              />
+            </div>
+            <button
+              type="submit"
+              className="min-h-11 w-full rounded-xl bg-purple-500/20 px-4 font-semibold text-purple-100 hover:bg-purple-500/25 sm:w-auto"
+            >
+              Dispute fine
+            </button>
+          </form>
+        </section>
+      ) : null}
 
       {canMutate ? (
         <section aria-labelledby="fine-actions-heading" className="space-y-4">
@@ -176,6 +238,60 @@ export default async function FineDetailPage({
                 className="min-h-11 w-full rounded-xl bg-red-500/15 px-4 font-semibold text-red-200 hover:bg-red-500/20"
               >
                 Cancel fine
+              </button>
+            </form>
+          </div>
+        </section>
+      ) : null}
+
+      {canResolveDispute ? (
+        <section aria-labelledby="resolve-dispute-heading" className="space-y-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.16em] text-purple-200">Staff review</p>
+            <h2 id="resolve-dispute-heading" className="mt-1 text-xl font-semibold text-[#F5F7FA]">
+              Resolve dispute
+            </h2>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <form action={acceptDispute} className="space-y-3 rounded-2xl border border-[#22C55E]/20 bg-[#15181D] p-4">
+              <label htmlFor="acceptDisputeReason" className="text-sm font-medium text-[#F5F7FA]">
+                Acceptance reason
+              </label>
+              <textarea
+                id="acceptDisputeReason"
+                name="reason"
+                rows={3}
+                minLength={3}
+                maxLength={1000}
+                required
+                className="w-full rounded-xl border border-[#252A31] bg-[#0B0D10] px-3 py-2 text-[#F5F7FA] outline-none focus:border-[#22C55E]"
+              />
+              <button
+                type="submit"
+                className="min-h-11 w-full rounded-xl bg-[#22C55E] px-4 font-semibold text-[#0B0D10] hover:opacity-90"
+              >
+                Accept dispute
+              </button>
+            </form>
+
+            <form action={rejectDispute} className="space-y-3 rounded-2xl border border-amber-400/20 bg-[#15181D] p-4">
+              <label htmlFor="rejectDisputeReason" className="text-sm font-medium text-[#F5F7FA]">
+                Rejection reason
+              </label>
+              <textarea
+                id="rejectDisputeReason"
+                name="reason"
+                rows={3}
+                minLength={3}
+                maxLength={1000}
+                required
+                className="w-full rounded-xl border border-[#252A31] bg-[#0B0D10] px-3 py-2 text-[#F5F7FA] outline-none focus:border-amber-400"
+              />
+              <button
+                type="submit"
+                className="min-h-11 w-full rounded-xl bg-amber-400/15 px-4 font-semibold text-amber-100 hover:bg-amber-400/20"
+              >
+                Reject dispute
               </button>
             </form>
           </div>
