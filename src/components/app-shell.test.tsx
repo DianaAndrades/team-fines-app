@@ -18,4 +18,35 @@ describe('AppShell', () => {
     )
     expect(screen.queryByText(/^fines$/i)).not.toBeInTheDocument()
   })
+
+  it('renders the team switcher for authenticated users with multiple teams', () => {
+    render(
+      <AppShell
+        activeTeamId="team-1"
+        teams={[
+          {
+            id: 'team-1',
+            name: 'FC Example',
+            currencyCode: 'EUR',
+            role: 'OWNER',
+          },
+          {
+            id: 'team-2',
+            name: 'Sunday XI',
+            currencyCode: 'GBP',
+            role: 'PLAYER',
+          },
+        ]}
+      >
+        <div>Dashboard content</div>
+      </AppShell>,
+    )
+
+    expect(screen.getByRole('button', { name: /switch to sunday xi/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /create team/i })).toHaveAttribute(
+      'href',
+      '/teams/new',
+    )
+    expect(screen.getByText('Dashboard content')).toBeInTheDocument()
+  })
 })
