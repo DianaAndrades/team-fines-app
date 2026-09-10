@@ -57,6 +57,42 @@ export async function listMyTeams(): Promise<MyTeam[]> {
   }))
 }
 
+export async function getLastActiveTeamId(userId: string): Promise<string | null> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('last_active_team_id')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error('Could not load active team.')
+  }
+
+  return typeof data?.last_active_team_id === 'string' ? data.last_active_team_id : null
+}
+
+export async function getTeamMembership(teamId: string): Promise<TeamRole | null> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('team_role_for', {
+    p_team_id: teamId,
+  })
+
+  if (error) {
+    throw new Error('Could not verify team access.')
+  }
+
+  if (data === null) {
+    return null
+  }
+
+  if (data === 'OWNER' || data === 'COACH' || data === 'PLAYER') {
+    return data
+  }
+
+  throw new Error('Team membership returned an invalid role.')
+}
+
 export async function setLastActiveTeam(teamId: string): Promise<void> {
   const supabase = await createClient()
   const { error } = await supabase.rpc('set_last_active_team', {
