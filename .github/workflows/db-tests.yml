@@ -6,6 +6,8 @@ on:
       - feat/mvp-foundation
     paths:
       - 'supabase/**'
+      - 'src/**/*.integration.test.ts'
+      - 'vitest.integration.config.ts'
       - '.github/workflows/db-tests.yml'
 
 jobs:
@@ -32,5 +34,23 @@ jobs:
       - name: Reset database
         run: ./node_modules/.bin/supabase db reset
 
+      - name: Export local Supabase credentials
+        shell: bash
+        run: |
+          eval "$(./node_modules/.bin/supabase status -o env)"
+          TEST_URL="${API_URL:-${SUPABASE_URL:-http://127.0.0.1:54321}}"
+          TEST_PUBLIC_KEY="${PUBLISHABLE_KEY:-${ANON_KEY:-}}"
+          TEST_SECRET_KEY="${SECRET_KEY:-${SERVICE_ROLE_KEY:-}}"
+          test -n "$TEST_PUBLIC_KEY"
+          test -n "$TEST_SECRET_KEY"
+          {
+            printf 'SUPABASE_TEST_URL=%s\n' "$TEST_URL"
+            printf 'SUPABASE_TEST_PUBLIC_KEY=%s\n' "$TEST_PUBLIC_KEY"
+            printf 'SUPABASE_TEST_SECRET_KEY=%s\n' "$TEST_SECRET_KEY"
+          } >> "$GITHUB_ENV"
+
       - name: Run database tests
         run: ./node_modules/.bin/supabase test db
+
+      - name: Run invitation integration tests
+        run: ./node_modules/.bin/vitest run --config vitest.integration.config.ts
