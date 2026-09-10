@@ -31,4 +31,14 @@ describe('createTeamSchema', () => {
       }).success,
     ).toBe(false)
   })
+
+  it('rejects a one-character team name to match the database constraint', () => {
+    expect(
+      createTeamSchema.safeParse({
+        name: 'A',
+        currencyCode: 'EUR',
+        seasonName: '2026/27',
+      }).success,
+    ).toBe(false)
+  })
 })
