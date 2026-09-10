@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
-import { createTeam } from './service'
+import { createTeam, setLastActiveTeam } from './service'
 import { createTeamSchema } from './schemas'
 
 export type CreateTeamActionState =
@@ -36,6 +36,12 @@ export async function createTeamAction(
 
   const teamId = await createTeam(parsed.data)
 
+  revalidatePath('/')
+  redirect(`/t/${teamId}`)
+}
+
+export async function switchTeamAction(teamId: string): Promise<void> {
+  await setLastActiveTeam(teamId)
   revalidatePath('/')
   redirect(`/t/${teamId}`)
 }
