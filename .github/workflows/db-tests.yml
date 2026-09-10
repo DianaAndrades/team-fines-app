@@ -10,6 +10,10 @@ on:
       - 'vitest.integration.config.ts'
       - '.github/workflows/db-tests.yml'
 
+concurrency:
+  group: database-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   db:
     runs-on: ubuntu-latest
