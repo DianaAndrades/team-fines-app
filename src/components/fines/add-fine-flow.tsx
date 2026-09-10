@@ -7,6 +7,7 @@ import {
   createRuleFineAction,
 } from '@/features/fines/actions'
 import { doubleMinorUnits, nextDoublingAt } from '@/features/fines/domain'
+import { ConfirmFineButton } from './confirm-fine-button'
 import { formatFineAmount } from './fine-card'
 
 type PlayerOption = {
@@ -122,12 +123,7 @@ function ReviewFine({
             <input type="hidden" name="amountMinor" value={amountMinor} />
           </>
         )}
-        <button
-          type="submit"
-          className="min-h-12 w-full rounded-xl bg-[#22C55E] px-5 font-semibold text-[#0B0D10] hover:opacity-90"
-        >
-          Confirm fine
-        </button>
+        <ConfirmFineButton />
       </form>
     </section>
   )
