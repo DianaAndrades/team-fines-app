@@ -2,12 +2,13 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(9);
+select plan(15);
 
 insert into auth.users (id, email)
 values
   ('20000000-0000-0000-0000-0000000000a1', 'owner-a@rules.test'),
   ('20000000-0000-0000-0000-0000000000a2', 'player-a@rules.test'),
+  ('20000000-0000-0000-0000-0000000000a3', 'coach-a@rules.test'),
   ('20000000-0000-0000-0000-0000000000b1', 'owner-b@rules.test'),
   ('20000000-0000-0000-0000-0000000000b2', 'player-b@rules.test');
 
@@ -25,6 +26,7 @@ insert into public.team_members (id, team_id, user_id, role)
 values
   ('23000000-0000-0000-0000-0000000000a1', '21000000-0000-0000-0000-0000000000a1', '20000000-0000-0000-0000-0000000000a1', 'OWNER'),
   ('23000000-0000-0000-0000-0000000000a2', '21000000-0000-0000-0000-0000000000a1', '20000000-0000-0000-0000-0000000000a2', 'PLAYER'),
+  ('23000000-0000-0000-0000-0000000000a3', '21000000-0000-0000-0000-0000000000a1', '20000000-0000-0000-0000-0000000000a3', 'COACH'),
   ('23000000-0000-0000-0000-0000000000b1', '21000000-0000-0000-0000-0000000000b1', '20000000-0000-0000-0000-0000000000b1', 'OWNER'),
   ('23000000-0000-0000-0000-0000000000b2', '21000000-0000-0000-0000-0000000000b1', '20000000-0000-0000-0000-0000000000b2', 'PLAYER');
 
@@ -156,6 +158,69 @@ select throws_ok(
   '42501',
   null,
   'Authenticated users cannot directly insert audit events'
+);
+
+select throws_ok(
+  $$select public.create_rule(
+      '21000000-0000-0000-0000-0000000000a1',
+      '22000000-0000-0000-0000-0000000000a1',
+      'Player-created rule', null, 250
+    )$$,
+  '42501',
+  'INSUFFICIENT_PERMISSION',
+  'PLAYER cannot create rules'
+);
+
+select throws_ok(
+  $$select public.update_rule(
+      '24000000-0000-0000-0000-0000000000a1',
+      '21000000-0000-0000-0000-0000000000a1',
+      '22000000-0000-0000-0000-0000000000a1',
+      'Changed by player', null, 500
+    )$$,
+  '42501',
+  'INSUFFICIENT_PERMISSION',
+  'PLAYER cannot edit rules'
+);
+
+select throws_ok(
+  $$select public.set_rule_active('24000000-0000-0000-0000-0000000000a1', false)$$,
+  '42501',
+  'INSUFFICIENT_PERMISSION',
+  'PLAYER cannot deactivate rules'
+);
+
+select set_config('request.jwt.claim.sub', '20000000-0000-0000-0000-0000000000a3', true);
+select set_config('request.jwt.claims', '{"sub":"20000000-0000-0000-0000-0000000000a3","role":"authenticated","email":"coach-a@rules.test"}', true);
+
+select lives_ok(
+  $$select public.create_rule(
+      '21000000-0000-0000-0000-0000000000a1',
+      '22000000-0000-0000-0000-0000000000a1',
+      'Coach rule', 'Created by coach', 450
+    )$$,
+  'COACH can create a rule in own active season'
+);
+
+select throws_ok(
+  $$select public.create_rule(
+      '21000000-0000-0000-0000-0000000000a1',
+      '22000000-0000-0000-0000-0000000000b1',
+      'Wrong season', null, 450
+    )$$,
+  '22023',
+  'INVALID_ACTIVE_SEASON',
+  'COACH cannot create a rule using another team season'
+);
+
+select public.set_rule_active('24000000-0000-0000-0000-0000000000a1', false);
+
+select results_eq(
+  $$select title from public.rules
+    where id = '24000000-0000-0000-0000-0000000000a1'
+      and is_active = false$$,
+  $$values ('Late to training'::text)$$,
+  'Inactive rule remains readable for management and history'
 );
 
 select * from finish();
