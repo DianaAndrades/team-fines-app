@@ -139,7 +139,7 @@ describe('fine server actions', () => {
     expect(revalidatePath).toHaveBeenCalledWith(`/t/${teamId}/fines/${fineId}`)
   })
 
-  it('accepts a dispute with the staff resolution reason', async () => {
+  it('accepts a dispute with the staff resolution reason and refreshes the queue', async () => {
     acceptFineDispute.mockResolvedValueOnce(undefined)
     const formData = new FormData()
     formData.set('reason', 'Player evidence accepted')
@@ -151,9 +151,10 @@ describe('fine server actions', () => {
       reason: 'Player evidence accepted',
     })
     expect(revalidatePath).toHaveBeenCalledWith(`/t/${teamId}/fines/${fineId}`)
+    expect(revalidatePath).toHaveBeenCalledWith(`/t/${teamId}/disputes`)
   })
 
-  it('rejects a dispute with the staff resolution reason', async () => {
+  it('rejects a dispute with the staff resolution reason and refreshes the queue', async () => {
     rejectFineDispute.mockResolvedValueOnce(undefined)
     const formData = new FormData()
     formData.set('reason', 'Attendance log confirms the fine')
@@ -165,5 +166,6 @@ describe('fine server actions', () => {
       reason: 'Attendance log confirms the fine',
     })
     expect(revalidatePath).toHaveBeenCalledWith(`/t/${teamId}/fines/${fineId}`)
+    expect(revalidatePath).toHaveBeenCalledWith(`/t/${teamId}/disputes`)
   })
 })
