@@ -7,7 +7,10 @@ import {
   type CreateTeamActionState,
 } from '@/features/teams/actions'
 
-const initialState: CreateTeamActionState = undefined
+const initialState: CreateTeamActionState = {
+  ok: false,
+  fieldErrors: {},
+}
 
 export default function NewTeamPage() {
   const [state, formAction, pending] = useActionState(createTeamAction, initialState)
@@ -35,7 +38,7 @@ export default function NewTeamPage() {
               autoComplete="organization"
               className="min-h-11 w-full rounded-lg border border-[#252A31] bg-[#15181D] px-3 text-[#F5F7FA] outline-none transition focus:border-[#22C55E] focus:ring-2 focus:ring-[#22C55E]/20"
             />
-            {state?.fieldErrors.name?.[0] ? (
+            {state.fieldErrors.name?.[0] ? (
               <p className="mt-2 text-sm text-[#EF4444]">{state.fieldErrors.name[0]}</p>
             ) : null}
           </div>
@@ -54,7 +57,7 @@ export default function NewTeamPage() {
               <option value="GBP">GBP</option>
               <option value="USD">USD</option>
             </select>
-            {state?.fieldErrors.currencyCode?.[0] ? (
+            {state.fieldErrors.currencyCode?.[0] ? (
               <p className="mt-2 text-sm text-[#EF4444]">
                 {state.fieldErrors.currencyCode[0]}
               </p>
@@ -72,7 +75,7 @@ export default function NewTeamPage() {
               placeholder="2026/27"
               className="min-h-11 w-full rounded-lg border border-[#252A31] bg-[#15181D] px-3 text-[#F5F7FA] outline-none transition placeholder:text-[#8B949E] focus:border-[#22C55E] focus:ring-2 focus:ring-[#22C55E]/20"
             />
-            {state?.fieldErrors.seasonName?.[0] ? (
+            {state.fieldErrors.seasonName?.[0] ? (
               <p className="mt-2 text-sm text-[#EF4444]">
                 {state.fieldErrors.seasonName[0]}
               </p>
