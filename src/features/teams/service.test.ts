@@ -1,18 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const rpc = vi.fn()
+const maybeSingle = vi.fn()
+const eq = vi.fn(() => ({ maybeSingle }))
+const select = vi.fn(() => ({ eq }))
+const from = vi.fn(() => ({ select }))
 
 vi.mock('server-only', () => ({}))
 
 vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(async () => ({ rpc })),
+  createClient: vi.fn(async () => ({ rpc, from })),
 }))
 
-import { createTeam, listMyTeams, setLastActiveTeam } from './service'
+import {
+  createTeam,
+  getLastActiveTeamId,
+  getTeamMembership,
+  listMyTeams,
+  setLastActiveTeam,
+} from './service'
 
 describe('team service', () => {
   beforeEach(() => {
     rpc.mockReset()
+    from.mockClear()
+    select.mockClear()
+    eq.mockClear()
+    maybeSingle.mockReset()
   })
 
   it('creates the team through the atomic Supabase RPC and returns its id', async () => {
@@ -77,6 +91,29 @@ describe('team service', () => {
 
     expect(rpc).toHaveBeenCalledWith('set_last_active_team', {
       p_team_id: 'team-123',
+    })
+  })
+
+  it('reads the last active team from the authenticated profile', async () => {
+    maybeSingle.mockResolvedValueOnce({
+      data: { last_active_team_id: 'team-2' },
+      error: null,
+    })
+
+    await expect(getLastActiveTeamId('user-123')).resolves.toBe('team-2')
+
+    expect(from).toHaveBeenCalledWith('profiles')
+    expect(select).toHaveBeenCalledWith('last_active_team_id')
+    expect(eq).toHaveBeenCalledWith('id', 'user-123')
+  })
+
+  it('returns the current role when the user belongs to a team', async () => {
+    rpc.mockResolvedValueOnce({ data: 'COACH', error: null })
+
+    await expect(getTeamMembership('team-456')).resolves.toBe('COACH')
+
+    expect(rpc).toHaveBeenCalledWith('team_role_for', {
+      p_team_id: 'team-456',
     })
   })
 })
