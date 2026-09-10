@@ -483,3 +483,312 @@ revoke execute on function public.set_rule_active(uuid, boolean) from public, an
 grant execute on function public.create_rule(uuid, uuid, text, text, numeric) to authenticated;
 grant execute on function public.update_rule(uuid, uuid, uuid, text, text, numeric) to authenticated;
 grant execute on function public.set_rule_active(uuid, boolean) to authenticated;
+
+create or replace function public.create_fine(
+  p_team_id uuid,
+  p_player_team_member_id uuid,
+  p_rule_id uuid default null,
+  p_custom_reason text default null,
+  p_custom_amount_minor numeric default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_fine_id uuid;
+  v_season_id uuid;
+  v_reason text;
+  v_amount numeric;
+  v_created_at timestamptz := now();
+begin
+  if auth.uid() is null or not public.is_team_staff(p_team_id) then
+    raise exception 'INSUFFICIENT_PERMISSION' using errcode = '42501';
+  end if;
+
+  select s.id
+  into v_season_id
+  from public.seasons s
+  where s.team_id = p_team_id
+    and s.is_active;
+
+  if v_season_id is null then
+    raise exception 'INVALID_ACTIVE_SEASON' using errcode = '22023';
+  end if;
+
+  if not exists (
+    select 1
+    from public.team_members tm
+    where tm.id = p_player_team_member_id
+      and tm.team_id = p_team_id
+      and tm.role = 'PLAYER'
+      and tm.status = 'ACTIVE'
+      and exists (
+        select 1
+        from public.season_members sm
+        where sm.season_id = v_season_id
+          and sm.team_member_id = tm.id
+          and sm.active
+      )
+  ) then
+    raise exception 'INVALID_PLAYER' using errcode = '22023';
+  end if;
+
+  if p_rule_id is not null then
+    select r.title, r.default_amount_minor
+    into v_reason, v_amount
+    from public.rules r
+    where r.id = p_rule_id
+      and r.team_id = p_team_id
+      and r.season_id = v_season_id
+      and r.is_active;
+
+    if v_reason is null then
+      raise exception 'INVALID_RULE' using errcode = '22023';
+    end if;
+  else
+    v_reason := trim(coalesce(p_custom_reason, ''));
+    v_amount := p_custom_amount_minor;
+
+    if v_reason = ''
+      or length(v_reason) > 240
+      or v_amount is null
+      or v_amount <= 0
+      or trunc(v_amount) <> v_amount then
+      raise exception 'INVALID_CUSTOM_FINE' using errcode = '22023';
+    end if;
+  end if;
+
+  insert into public.fines(
+    team_id,
+    player_team_member_id,
+    origin_season_id,
+    source_rule_id,
+    reason_snapshot,
+    original_amount_minor,
+    current_amount_minor,
+    created_by,
+    created_at,
+    next_doubling_at
+  )
+  values (
+    p_team_id,
+    p_player_team_member_id,
+    v_season_id,
+    p_rule_id,
+    v_reason,
+    v_amount,
+    v_amount,
+    auth.uid(),
+    v_created_at,
+    v_created_at + interval '7 days'
+  )
+  returning id into v_fine_id;
+
+  insert into public.fine_season_links(fine_id, season_id, link_type)
+  values (v_fine_id, v_season_id, 'ORIGIN');
+
+  insert into public.fine_events(fine_id, type, actor_user_id, new_amount_minor)
+  values (v_fine_id, 'CREATED', auth.uid(), v_amount);
+
+  return v_fine_id;
+end;
+$$;
+
+create or replace function public.mark_fine_paid(p_fine_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_fine public.fines%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'INSUFFICIENT_PERMISSION' using errcode = '42501';
+  end if;
+
+  select *
+  into v_fine
+  from public.fines
+  where id = p_fine_id
+  for update;
+
+  if not found then
+    raise exception 'FINE_NOT_FOUND' using errcode = '22023';
+  end if;
+
+  if not public.is_team_staff(v_fine.team_id) then
+    raise exception 'INSUFFICIENT_PERMISSION' using errcode = '42501';
+  end if;
+
+  if v_fine.status <> 'PENDING' then
+    raise exception 'INVALID_FINE_STATE' using errcode = '22023';
+  end if;
+
+  update public.fines
+  set status = 'PAID',
+      next_doubling_at = null,
+      paid_at = now(),
+      paid_by = auth.uid()
+  where id = p_fine_id;
+
+  insert into public.fine_events(
+    fine_id,
+    type,
+    actor_user_id,
+    previous_amount_minor,
+    new_amount_minor
+  )
+  values (
+    p_fine_id,
+    'PAID',
+    auth.uid(),
+    v_fine.current_amount_minor,
+    v_fine.current_amount_minor
+  );
+end;
+$$;
+
+create or replace function public.adjust_fine_amount(
+  p_fine_id uuid,
+  p_new_amount_minor numeric,
+  p_reason text
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_fine public.fines%rowtype;
+  v_reason text := trim(coalesce(p_reason, ''));
+begin
+  if auth.uid() is null then
+    raise exception 'INSUFFICIENT_PERMISSION' using errcode = '42501';
+  end if;
+
+  select *
+  into v_fine
+  from public.fines
+  where id = p_fine_id
+  for update;
+
+  if not found then
+    raise exception 'FINE_NOT_FOUND' using errcode = '22023';
+  end if;
+
+  if not public.is_team_staff(v_fine.team_id) then
+    raise exception 'INSUFFICIENT_PERMISSION' using errcode = '42501';
+  end if;
+
+  if v_fine.status <> 'PENDING' then
+    raise exception 'INVALID_FINE_STATE' using errcode = '22023';
+  end if;
+
+  if p_new_amount_minor is null
+    or p_new_amount_minor <= 0
+    or trunc(p_new_amount_minor) <> p_new_amount_minor
+    or length(v_reason) not between 3 and 500 then
+    raise exception 'INVALID_FINE_ADJUSTMENT' using errcode = '22023';
+  end if;
+
+  update public.fines
+  set current_amount_minor = p_new_amount_minor
+  where id = p_fine_id;
+
+  insert into public.fine_events(
+    fine_id,
+    type,
+    actor_user_id,
+    previous_amount_minor,
+    new_amount_minor,
+    metadata
+  )
+  values (
+    p_fine_id,
+    'AMOUNT_ADJUSTED',
+    auth.uid(),
+    v_fine.current_amount_minor,
+    p_new_amount_minor,
+    jsonb_build_object('reason', v_reason)
+  );
+end;
+$$;
+
+create or replace function public.cancel_fine(
+  p_fine_id uuid,
+  p_reason text
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_fine public.fines%rowtype;
+  v_reason text := trim(coalesce(p_reason, ''));
+begin
+  if auth.uid() is null then
+    raise exception 'INSUFFICIENT_PERMISSION' using errcode = '42501';
+  end if;
+
+  select *
+  into v_fine
+  from public.fines
+  where id = p_fine_id
+  for update;
+
+  if not found then
+    raise exception 'FINE_NOT_FOUND' using errcode = '22023';
+  end if;
+
+  if not public.is_team_staff(v_fine.team_id) then
+    raise exception 'INSUFFICIENT_PERMISSION' using errcode = '42501';
+  end if;
+
+  if v_fine.status <> 'PENDING' then
+    raise exception 'INVALID_FINE_STATE' using errcode = '22023';
+  end if;
+
+  if v_reason = '' or length(v_reason) > 500 then
+    raise exception 'INVALID_CANCELLATION_REASON' using errcode = '22023';
+  end if;
+
+  update public.fines
+  set status = 'CANCELLED',
+      next_doubling_at = null,
+      cancelled_at = now(),
+      cancelled_by = auth.uid(),
+      cancellation_reason = v_reason
+  where id = p_fine_id;
+
+  insert into public.fine_events(
+    fine_id,
+    type,
+    actor_user_id,
+    previous_amount_minor,
+    new_amount_minor,
+    metadata
+  )
+  values (
+    p_fine_id,
+    'CANCELLED',
+    auth.uid(),
+    v_fine.current_amount_minor,
+    v_fine.current_amount_minor,
+    jsonb_build_object('reason', v_reason)
+  );
+end;
+$$;
+
+revoke execute on function public.create_fine(uuid, uuid, uuid, text, numeric) from public, anon;
+revoke execute on function public.mark_fine_paid(uuid) from public, anon;
+revoke execute on function public.adjust_fine_amount(uuid, numeric, text) from public, anon;
+revoke execute on function public.cancel_fine(uuid, text) from public, anon;
+
+grant execute on function public.create_fine(uuid, uuid, uuid, text, numeric) to authenticated;
+grant execute on function public.mark_fine_paid(uuid) to authenticated;
+grant execute on function public.adjust_fine_amount(uuid, numeric, text) to authenticated;
+grant execute on function public.cancel_fine(uuid, text) to authenticated;
