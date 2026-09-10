@@ -63,24 +63,26 @@ describe('fine mutation service', () => {
 
   it('marks a fine paid through the locked transition RPC', async () => {
     rpc.mockResolvedValueOnce({ data: null, error: null })
+    const fineId = '44444444-4444-4444-8444-444444444443'
 
-    await expect(markFinePaid('fine-3')).resolves.toBeUndefined()
-    expect(rpc).toHaveBeenCalledWith('mark_fine_paid', { p_fine_id: 'fine-3' })
+    await expect(markFinePaid(fineId)).resolves.toBeUndefined()
+    expect(rpc).toHaveBeenCalledWith('mark_fine_paid', { p_fine_id: fineId })
   })
 
   it('adjusts a fine amount with its audit reason', async () => {
     rpc.mockResolvedValueOnce({ data: null, error: null })
+    const fineId = '44444444-4444-4444-8444-444444444444'
 
     await expect(
       adjustFine({
-        fineId: 'fine-4',
+        fineId,
         newAmountMinor: '900',
         reason: 'Corrected by coach',
       }),
     ).resolves.toBeUndefined()
 
     expect(rpc).toHaveBeenCalledWith('adjust_fine_amount', {
-      p_fine_id: 'fine-4',
+      p_fine_id: fineId,
       p_new_amount_minor: '900',
       p_reason: 'Corrected by coach',
     })
@@ -88,12 +90,13 @@ describe('fine mutation service', () => {
 
   it('cancels a fine with its audit reason', async () => {
     rpc.mockResolvedValueOnce({ data: null, error: null })
+    const fineId = '44444444-4444-4444-8444-444444444445'
 
     await expect(
-      cancelFine({ fineId: 'fine-5', reason: 'Training cancelled' }),
+      cancelFine({ fineId, reason: 'Training cancelled' }),
     ).resolves.toBeUndefined()
     expect(rpc).toHaveBeenCalledWith('cancel_fine', {
-      p_fine_id: 'fine-5',
+      p_fine_id: fineId,
       p_reason: 'Training cancelled',
     })
   })
