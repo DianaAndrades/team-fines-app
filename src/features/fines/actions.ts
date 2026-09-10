@@ -27,6 +27,10 @@ function revalidateFinePaths(teamId: string, fineId?: string) {
   }
 }
 
+function revalidateDisputeQueue(teamId: string) {
+  revalidatePath(`/t/${teamId}/disputes`)
+}
+
 function parseDisputeInput(fineId: string, formData: FormData) {
   return fineDisputeSchema.parse({
     fineId,
@@ -112,6 +116,7 @@ export async function acceptFineDisputeAction(
 ): Promise<void> {
   await acceptFineDispute(parseDisputeInput(fineId, formData))
   revalidateFinePaths(teamId, fineId)
+  revalidateDisputeQueue(teamId)
 }
 
 export async function rejectFineDisputeAction(
@@ -121,4 +126,5 @@ export async function rejectFineDisputeAction(
 ): Promise<void> {
   await rejectFineDispute(parseDisputeInput(fineId, formData))
   revalidateFinePaths(teamId, fineId)
+  revalidateDisputeQueue(teamId)
 }
