@@ -10,9 +10,9 @@ returns table (
   disputed_at timestamptz
 )
 language plpgsql
+stable
 security definer
 set search_path = ''
-stable
 as $$
 begin
   if auth.uid() is null or not public.is_team_staff(p_team_id) then
@@ -23,20 +23,23 @@ begin
   select
     f.id,
     f.team_id,
-    coalesce(nullif(trim(p.full_name), ''), p.email, 'Player')::text,
+    coalesce(nullif(trim(p.display_name), ''), p.email),
     f.reason_snapshot,
-    coalesce(f.dispute_reason, ''),
+    f.dispute_reason,
     f.current_amount_minor,
     f.dispute_remaining_seconds,
     f.disputed_at
   from public.fines f
   join public.team_members tm
     on tm.id = f.player_team_member_id
-   and tm.team_id = f.team_id
+    and tm.team_id = f.team_id
   join public.profiles p on p.id = tm.user_id
   where f.team_id = p_team_id
     and f.status = 'DISPUTED'
-  order by f.disputed_at asc nulls last, f.id;
+    and f.dispute_reason is not null
+    and f.dispute_remaining_seconds is not null
+    and f.disputed_at is not null
+  order by f.disputed_at asc, f.id asc;
 end;
 $$;
 
