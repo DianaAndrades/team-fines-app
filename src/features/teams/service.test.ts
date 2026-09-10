@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const rpc = vi.fn()
 const maybeSingle = vi.fn()
-const eq = vi.fn(() => ({ maybeSingle }))
+const eq = vi.fn(() => ({ eq, maybeSingle }))
 const select = vi.fn(() => ({ eq }))
 const from = vi.fn(() => ({ select }))
 
@@ -15,6 +15,7 @@ vi.mock('@/lib/supabase/server', () => ({
 import {
   createTeam,
   getLastActiveTeamId,
+  getTeamMemberIdForUser,
   getTeamMembership,
   listMyTeams,
   setLastActiveTeam,
@@ -115,5 +116,17 @@ describe('team service', () => {
     expect(rpc).toHaveBeenCalledWith('team_role_for', {
       p_team_id: 'team-456',
     })
+  })
+
+  it('returns the active team member id for a user in a team', async () => {
+    maybeSingle.mockResolvedValueOnce({ data: { id: 'member-123' }, error: null })
+
+    await expect(getTeamMemberIdForUser('team-456', 'user-123')).resolves.toBe('member-123')
+
+    expect(from).toHaveBeenCalledWith('team_members')
+    expect(select).toHaveBeenCalledWith('id')
+    expect(eq).toHaveBeenCalledWith('team_id', 'team-456')
+    expect(eq).toHaveBeenCalledWith('user_id', 'user-123')
+    expect(eq).toHaveBeenCalledWith('status', 'ACTIVE')
   })
 })
