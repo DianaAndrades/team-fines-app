@@ -7,13 +7,17 @@ import {
   adjustFineSchema,
   createCustomFineSchema,
   createRuleFineSchema,
+  fineDisputeSchema,
 } from './schemas'
 import {
+  acceptFineDispute,
   adjustFine,
   cancelFine,
   createCustomFine,
   createRuleFine,
   markFinePaid,
+  openFineDispute,
+  rejectFineDispute,
 } from './service'
 
 function revalidateFinePaths(teamId: string, fineId?: string) {
@@ -21,6 +25,13 @@ function revalidateFinePaths(teamId: string, fineId?: string) {
   if (fineId) {
     revalidatePath(`/t/${teamId}/fines/${fineId}`)
   }
+}
+
+function parseDisputeInput(fineId: string, formData: FormData) {
+  return fineDisputeSchema.parse({
+    fineId,
+    reason: formData.get('reason'),
+  })
 }
 
 export async function createRuleFineAction(teamId: string, formData: FormData): Promise<void> {
@@ -82,5 +93,32 @@ export async function cancelFineAction(
 ): Promise<void> {
   const reason = String(formData.get('reason') ?? '').trim()
   await cancelFine({ fineId, reason })
+  revalidateFinePaths(teamId, fineId)
+}
+
+export async function openFineDisputeAction(
+  teamId: string,
+  fineId: string,
+  formData: FormData,
+): Promise<void> {
+  await openFineDispute(parseDisputeInput(fineId, formData))
+  revalidateFinePaths(teamId, fineId)
+}
+
+export async function acceptFineDisputeAction(
+  teamId: string,
+  fineId: string,
+  formData: FormData,
+): Promise<void> {
+  await acceptFineDispute(parseDisputeInput(fineId, formData))
+  revalidateFinePaths(teamId, fineId)
+}
+
+export async function rejectFineDisputeAction(
+  teamId: string,
+  fineId: string,
+  formData: FormData,
+): Promise<void> {
+  await rejectFineDispute(parseDisputeInput(fineId, formData))
   revalidateFinePaths(teamId, fineId)
 }
