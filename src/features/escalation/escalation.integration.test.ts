@@ -12,7 +12,6 @@ function requiredEnv(name: string): string {
 }
 
 const supabaseUrl = requiredEnv('SUPABASE_TEST_URL')
-const publicKey = requiredEnv('SUPABASE_TEST_PUBLIC_KEY')
 const secretKey = requiredEnv('SUPABASE_TEST_SECRET_KEY')
 
 const admin = createClient(supabaseUrl, secretKey, {
@@ -25,56 +24,40 @@ function createAdminClient() {
   })
 }
 
-async function createAuthenticatedClient(email: string, password: string) {
-  const { data, error: createError } = await admin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-  })
-
-  if (createError) {
-    throw createError
-  }
-
-  const client = createClient(supabaseUrl, publicKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
-  const { error: signInError } = await client.auth.signInWithPassword({ email, password })
-
-  if (signInError) {
-    throw signInError
-  }
-
-  return { client, userId: data.user.id }
-}
-
 describe('fine escalation concurrency', () => {
   it('persists each scheduled doubling only once when two processors race', async () => {
     const suffix = crypto.randomUUID()
-    const password = 'IntegrationTest-2026!'
-    const ownerEmail = `escalation-owner-${suffix}@example.com`
-    const playerEmail = `escalation-player-${suffix}@example.com`
     const processingAt = '2026-09-10T12:00:00.000Z'
     const firstDueAt = '2026-09-03T12:00:00.000Z'
     const secondDueAt = '2026-09-10T12:00:00.000Z'
 
-    const owner = await createAuthenticatedClient(ownerEmail, password)
-    const player = await createAuthenticatedClient(playerEmail, password)
-
-    const { data: teamId, error: teamError } = await owner.client.rpc('create_team_with_owner', {
-      p_name: `Concurrency FC ${suffix.slice(0, 8)}`,
-      p_currency_code: 'EUR',
-      p_season_name: '2026/27',
+    const { data: ownerData, error: ownerError } = await admin.auth.admin.createUser({
+      email: `escalation-owner-${suffix}@example.com`,
+      email_confirm: true,
+    })
+    const { data: playerData, error: playerError } = await admin.auth.admin.createUser({
+      email: `escalation-player-${suffix}@example.com`,
+      email_confirm: true,
     })
 
+    expect(ownerError).toBeNull()
+    expect(playerError).toBeNull()
+
+    const { data: team, error: teamError } = await admin
+      .from('teams')
+      .insert({
+        name: `Concurrency FC ${suffix.slice(0, 8)}`,
+        currency_code: 'EUR',
+      })
+      .select('id')
+      .single()
+
     expect(teamError).toBeNull()
-    expect(typeof teamId).toBe('string')
 
     const { data: season, error: seasonError } = await admin
       .from('seasons')
+      .insert({ team_id: team.id, name: '2026/27', is_active: true })
       .select('id')
-      .eq('team_id', teamId)
-      .eq('is_active', true)
       .single()
 
     expect(seasonError).toBeNull()
@@ -82,8 +65,8 @@ describe('fine escalation concurrency', () => {
     const { data: playerMember, error: memberError } = await admin
       .from('team_members')
       .insert({
-        team_id: teamId,
-        user_id: player.userId,
+        team_id: team.id,
+        user_id: playerData.user.id,
         role: 'PLAYER',
         status: 'ACTIVE',
       })
@@ -102,14 +85,14 @@ describe('fine escalation concurrency', () => {
     const { data: fine, error: fineError } = await admin
       .from('fines')
       .insert({
-        team_id: teamId,
+        team_id: team.id,
         player_team_member_id: playerMember.id,
         origin_season_id: season.id,
         reason_snapshot: 'Concurrency test fine',
         original_amount_minor: 500,
         current_amount_minor: 500,
         status: 'PENDING',
-        created_by: owner.userId,
+        created_by: ownerData.user.id,
         created_at: '2026-08-27T12:00:00.000Z',
         next_doubling_at: firstDueAt,
       })
