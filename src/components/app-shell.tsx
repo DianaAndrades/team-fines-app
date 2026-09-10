@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
 import type { MyTeam } from '@/features/teams/service'
+import { TeamSwitcher } from './team-switcher'
 
 type AppShellProps = {
   teams: MyTeam[]
@@ -39,13 +40,10 @@ export function AppShell({ teams, activeTeamId, children }: AppShellProps) {
     <div className="min-h-screen bg-[#0B0D10] text-[#F5F7FA]">
       <header className="border-b border-[#252A31] bg-[#15181D] px-5 py-4">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-[#8B949E]">Team Fines</p>
-            <p className="mt-1 font-semibold">{activeTeam.name}</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-[#8B949E]">Team Fines</p>
+          <div className="w-full max-w-xs">
+            <TeamSwitcher teams={teams} activeTeamId={activeTeam.id} />
           </div>
-          <span className="rounded-full border border-[#252A31] px-3 py-1 text-xs font-medium text-[#8B949E]">
-            {activeTeam.role}
-          </span>
         </div>
       </header>
 
