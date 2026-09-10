@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseEnv } from './env'
+import { parseEnv } from './env-schema'
 
 describe('parseEnv', () => {
   it('rejects a missing Supabase URL', () => {
