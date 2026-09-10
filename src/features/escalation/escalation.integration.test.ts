@@ -42,6 +42,15 @@ describe('fine escalation concurrency', () => {
 
     expect(ownerError).toBeNull()
     expect(playerError).toBeNull()
+    expect(ownerData.user).not.toBeNull()
+    expect(playerData.user).not.toBeNull()
+
+    if (!ownerData.user || !playerData.user) {
+      throw new Error('Escalation integration user setup failed.')
+    }
+
+    const ownerUser = ownerData.user
+    const playerUser = playerData.user
 
     const { data: team, error: teamError } = await admin
       .from('teams')
@@ -53,6 +62,10 @@ describe('fine escalation concurrency', () => {
       .single()
 
     expect(teamError).toBeNull()
+    expect(team).not.toBeNull()
+    if (!team) {
+      throw new Error('Escalation integration team setup failed.')
+    }
 
     const { data: season, error: seasonError } = await admin
       .from('seasons')
@@ -61,12 +74,16 @@ describe('fine escalation concurrency', () => {
       .single()
 
     expect(seasonError).toBeNull()
+    expect(season).not.toBeNull()
+    if (!season) {
+      throw new Error('Escalation integration season setup failed.')
+    }
 
     const { data: playerMember, error: memberError } = await admin
       .from('team_members')
       .insert({
         team_id: team.id,
-        user_id: playerData.user.id,
+        user_id: playerUser.id,
         role: 'PLAYER',
         status: 'ACTIVE',
       })
@@ -74,6 +91,10 @@ describe('fine escalation concurrency', () => {
       .single()
 
     expect(memberError).toBeNull()
+    expect(playerMember).not.toBeNull()
+    if (!playerMember) {
+      throw new Error('Escalation integration player membership setup failed.')
+    }
 
     const { error: seasonMemberError } = await admin.from('season_members').insert({
       season_id: season.id,
@@ -92,7 +113,7 @@ describe('fine escalation concurrency', () => {
         original_amount_minor: 500,
         current_amount_minor: 500,
         status: 'PENDING',
-        created_by: ownerData.user.id,
+        created_by: ownerUser.id,
         created_at: '2026-08-27T12:00:00.000Z',
         next_doubling_at: firstDueAt,
       })
@@ -100,6 +121,10 @@ describe('fine escalation concurrency', () => {
       .single()
 
     expect(fineError).toBeNull()
+    expect(fine).not.toBeNull()
+    if (!fine) {
+      throw new Error('Escalation integration fine setup failed.')
+    }
 
     const processorA = createAdminClient()
     const processorB = createAdminClient()
@@ -119,6 +144,11 @@ describe('fine escalation concurrency', () => {
       .single()
 
     expect(finalFineError).toBeNull()
+    expect(finalFine).not.toBeNull()
+    if (!finalFine) {
+      throw new Error('Escalation integration final fine lookup failed.')
+    }
+
     expect(String(finalFine.current_amount_minor)).toBe('2000')
     expect(new Date(finalFine.next_doubling_at).toISOString()).toBe('2026-09-17T12:00:00.000Z')
 
