@@ -5,6 +5,10 @@ on:
     branches:
       - feat/mvp-foundation
 
+concurrency:
+  group: foundation-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   checks:
     runs-on: ubuntu-latest
