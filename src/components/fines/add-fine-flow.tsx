@@ -13,7 +13,10 @@ type PlayerOption = {
 
 type RuleOption = {
   id: string
+  teamId: string
+  seasonId: string
   title: string
+  description: string | null
   defaultAmountMinor: string
   isActive: boolean
 }
@@ -49,9 +52,8 @@ export function AddFineFlow({
 
   const selectedPlayer = players.find((player) => player.teamMemberId === selectedPlayerId)
   const selectedRule = rules.find((rule) => rule.id === selectedRuleId)
-  const step = selectedPlayer ? (selectedRule ? 3 : 2) : 1
 
-  if (step === 1) {
+  if (!selectedPlayer) {
     return (
       <section className="space-y-5">
         <div>
@@ -75,7 +77,7 @@ export function AddFineFlow({
     )
   }
 
-  if (step === 2) {
+  if (!selectedRule) {
     return (
       <section className="space-y-5">
         <div>
