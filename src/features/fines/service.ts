@@ -32,6 +32,11 @@ type CancelFineInput = {
   reason: string
 }
 
+type DisputeInput = {
+  fineId: string
+  reason: string
+}
+
 export type ActivePlayer = {
   teamMemberId: string
   name: string
@@ -148,6 +153,33 @@ export async function cancelFine(input: CancelFineInput): Promise<void> {
   const { error } = await supabase.rpc('cancel_fine', {
     p_fine_id: input.fineId,
     p_reason: reason,
+  })
+  if (error) throw stableFineError(error.message)
+}
+
+export async function openFineDispute(input: DisputeInput): Promise<void> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('open_fine_dispute', {
+    p_fine_id: input.fineId,
+    p_reason: input.reason,
+  })
+  if (error) throw stableFineError(error.message)
+}
+
+export async function acceptFineDispute(input: DisputeInput): Promise<void> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('accept_fine_dispute', {
+    p_fine_id: input.fineId,
+    p_reason: input.reason,
+  })
+  if (error) throw stableFineError(error.message)
+}
+
+export async function rejectFineDispute(input: DisputeInput): Promise<void> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('reject_fine_dispute', {
+    p_fine_id: input.fineId,
+    p_reason: input.reason,
   })
   if (error) throw stableFineError(error.message)
 }
