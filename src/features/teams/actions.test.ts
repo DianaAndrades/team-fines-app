@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const createTeam = vi.fn()
-const revalidatePath = vi.fn()
-const redirect = vi.fn()
+const { createTeam, revalidatePath, redirect } = vi.hoisted(() => ({
+  createTeam: vi.fn(),
+  revalidatePath: vi.fn(),
+  redirect: vi.fn(),
+}))
 
 vi.mock('./service', () => ({
   createTeam,
