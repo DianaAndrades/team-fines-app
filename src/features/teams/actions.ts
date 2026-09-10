@@ -6,19 +6,17 @@ import { redirect } from 'next/navigation'
 import { createTeam, setLastActiveTeam } from './service'
 import { createTeamSchema } from './schemas'
 
-export type CreateTeamActionState =
-  | undefined
-  | {
-      ok: false
-      fieldErrors: {
-        name?: string[]
-        currencyCode?: string[]
-        seasonName?: string[]
-      }
-    }
+export type CreateTeamActionState = {
+  ok: false
+  fieldErrors: {
+    name?: string[]
+    currencyCode?: string[]
+    seasonName?: string[]
+  }
+}
 
 export async function createTeamAction(
-  _previousState: CreateTeamActionState,
+  _previousState: CreateTeamActionState | undefined,
   formData: FormData,
 ): Promise<CreateTeamActionState> {
   const parsed = createTeamSchema.safeParse({
