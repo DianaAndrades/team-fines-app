@@ -5,12 +5,14 @@ const {
   listMyTeams,
   getLastActiveTeamId,
   setLastActiveTeam,
+  listMyPendingInvitations,
   redirect,
 } = vi.hoisted(() => ({
   requireUser: vi.fn(),
   listMyTeams: vi.fn(),
   getLastActiveTeamId: vi.fn(),
   setLastActiveTeam: vi.fn(),
+  listMyPendingInvitations: vi.fn(),
   redirect: vi.fn(),
 }))
 
@@ -20,6 +22,7 @@ vi.mock('@/features/teams/service', () => ({
   getLastActiveTeamId,
   setLastActiveTeam,
 }))
+vi.mock('@/features/invitations/service', () => ({ listMyPendingInvitations }))
 vi.mock('next/navigation', () => ({ redirect }))
 
 import HomePage from './page'
@@ -39,16 +42,34 @@ describe('root team routing', () => {
     listMyTeams.mockReset()
     getLastActiveTeamId.mockReset()
     setLastActiveTeam.mockReset()
+    listMyPendingInvitations.mockReset()
     redirect.mockReset()
 
     requireUser.mockResolvedValue({ id: 'user-1' })
     setLastActiveTeam.mockResolvedValue(undefined)
+    listMyPendingInvitations.mockResolvedValue([])
     redirect.mockImplementation((path: string) => {
       throw new Error(`REDIRECT:${path}`)
     })
   })
 
-  it('sends users without teams to team onboarding', async () => {
+  it('sends users with a pending invitation to invitation onboarding', async () => {
+    listMyTeams.mockResolvedValue([])
+    listMyPendingInvitations.mockResolvedValue([
+      {
+        id: 'invite-1',
+        teamId: 'team-1',
+        teamName: 'FC Example',
+        role: 'PLAYER',
+        expiresAt: '2026-09-17T12:00:00.000Z',
+      },
+    ])
+
+    await expect(runHomePage()).rejects.toThrow('REDIRECT:/invitations')
+    expect(getLastActiveTeamId).not.toHaveBeenCalled()
+  })
+
+  it('sends users without teams or invitations to team onboarding', async () => {
     listMyTeams.mockResolvedValue([])
 
     await expect(runHomePage()).rejects.toThrow('REDIRECT:/teams/new')
