@@ -6,6 +6,9 @@ const {
   markFinePaid,
   adjustFine,
   cancelFine,
+  openFineDispute,
+  acceptFineDispute,
+  rejectFineDispute,
   revalidatePath,
   redirect,
 } = vi.hoisted(() => ({
@@ -14,6 +17,9 @@ const {
   markFinePaid: vi.fn(),
   adjustFine: vi.fn(),
   cancelFine: vi.fn(),
+  openFineDispute: vi.fn(),
+  acceptFineDispute: vi.fn(),
+  rejectFineDispute: vi.fn(),
   revalidatePath: vi.fn(),
   redirect: vi.fn(),
 }))
@@ -26,14 +32,20 @@ vi.mock('./service', () => ({
   markFinePaid,
   adjustFine,
   cancelFine,
+  openFineDispute,
+  acceptFineDispute,
+  rejectFineDispute,
 }))
 
 import {
+  acceptFineDisputeAction,
   adjustFineAction,
   cancelFineAction,
   createCustomFineAction,
   createRuleFineAction,
   markFinePaidAction,
+  openFineDisputeAction,
+  rejectFineDisputeAction,
 } from './actions'
 
 const teamId = '11111111-1111-4111-8111-111111111111'
@@ -110,5 +122,48 @@ describe('fine server actions', () => {
     await cancelFineAction(teamId, fineId, formData)
 
     expect(cancelFine).toHaveBeenCalledWith({ fineId, reason: 'Training cancelled' })
+  })
+
+  it('opens a dispute with a validated reason and revalidates the fine', async () => {
+    openFineDispute.mockResolvedValueOnce(undefined)
+    const formData = new FormData()
+    formData.set('reason', '  Training started later than scheduled  ')
+
+    await openFineDisputeAction(teamId, fineId, formData)
+
+    expect(openFineDispute).toHaveBeenCalledWith({
+      fineId,
+      reason: 'Training started later than scheduled',
+    })
+    expect(revalidatePath).toHaveBeenCalledWith(`/t/${teamId}/fines`)
+    expect(revalidatePath).toHaveBeenCalledWith(`/t/${teamId}/fines/${fineId}`)
+  })
+
+  it('accepts a dispute with the staff resolution reason', async () => {
+    acceptFineDispute.mockResolvedValueOnce(undefined)
+    const formData = new FormData()
+    formData.set('reason', 'Player evidence accepted')
+
+    await acceptFineDisputeAction(teamId, fineId, formData)
+
+    expect(acceptFineDispute).toHaveBeenCalledWith({
+      fineId,
+      reason: 'Player evidence accepted',
+    })
+    expect(revalidatePath).toHaveBeenCalledWith(`/t/${teamId}/fines/${fineId}`)
+  })
+
+  it('rejects a dispute with the staff resolution reason', async () => {
+    rejectFineDispute.mockResolvedValueOnce(undefined)
+    const formData = new FormData()
+    formData.set('reason', 'Attendance log confirms the fine')
+
+    await rejectFineDisputeAction(teamId, fineId, formData)
+
+    expect(rejectFineDispute).toHaveBeenCalledWith({
+      fineId,
+      reason: 'Attendance log confirms the fine',
+    })
+    expect(revalidatePath).toHaveBeenCalledWith(`/t/${teamId}/fines/${fineId}`)
   })
 })
