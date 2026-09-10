@@ -20,3 +20,8 @@ export const adjustFineSchema = z.object({
   newAmountMinor: positiveMinorUnits,
   reason: z.string().trim().min(3).max(500),
 })
+
+export const fineDisputeSchema = z.object({
+  fineId: z.string().uuid(),
+  reason: z.string().trim().min(3).max(1000),
+})
