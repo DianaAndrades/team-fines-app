@@ -1,13 +1,19 @@
 import { createClient } from '@supabase/supabase-js'
 import { describe, expect, it } from 'vitest'
 
-const supabaseUrl = process.env.SUPABASE_TEST_URL
-const publicKey = process.env.SUPABASE_TEST_PUBLIC_KEY
-const secretKey = process.env.SUPABASE_TEST_SECRET_KEY
+function requiredEnv(name: string): string {
+  const value = process.env[name]
 
-if (!supabaseUrl || !publicKey || !secretKey) {
-  throw new Error('Supabase integration test environment is not configured.')
+  if (!value) {
+    throw new Error(`Missing integration environment variable: ${name}`)
+  }
+
+  return value
 }
+
+const supabaseUrl = requiredEnv('SUPABASE_TEST_URL')
+const publicKey = requiredEnv('SUPABASE_TEST_PUBLIC_KEY')
+const secretKey = requiredEnv('SUPABASE_TEST_SECRET_KEY')
 
 const admin = createClient(supabaseUrl, secretKey, {
   auth: { persistSession: false, autoRefreshToken: false },
