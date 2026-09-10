@@ -89,7 +89,9 @@ describe('fine mutation service', () => {
   it('cancels a fine with its audit reason', async () => {
     rpc.mockResolvedValueOnce({ data: null, error: null })
 
-    await expect(cancelFine('fine-5', 'Training cancelled')).resolves.toBeUndefined()
+    await expect(
+      cancelFine({ fineId: 'fine-5', reason: 'Training cancelled' }),
+    ).resolves.toBeUndefined()
     expect(rpc).toHaveBeenCalledWith('cancel_fine', {
       p_fine_id: 'fine-5',
       p_reason: 'Training cancelled',
