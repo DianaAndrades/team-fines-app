@@ -69,16 +69,20 @@ select ok(
   'Invitation expires after seven days'
 );
 
-select public.invite_team_member(
-  '10000000-0000-0000-0000-0000000000a1',
-  'invitee@example.com',
-  'PLAYER'
+select set_config(
+  'test.invitee_invitation_id',
+  public.invite_team_member(
+    '10000000-0000-0000-0000-0000000000a1',
+    'invitee@example.com',
+    'PLAYER'
+  )::text,
+  true
 );
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000e1', true);
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000e1","role":"authenticated","email":"wrong@example.com"}', true);
 select throws_ok(
-  $$select public.accept_team_invitation((select id from public.team_invitations where email_normalized = 'invitee@example.com' and status = 'PENDING'))$$,
+  $$select public.accept_team_invitation(current_setting('test.invitee_invitation_id')::uuid)$$,
   '42501',
   'INVITATION_EMAIL_MISMATCH',
   'Wrong email cannot accept invitation'
@@ -87,7 +91,7 @@ select throws_ok(
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000b1', true);
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000b1","role":"authenticated","email":"invitee@example.com"}', true);
 select public.accept_team_invitation(
-  (select id from public.team_invitations where email_normalized = 'invitee@example.com' and status = 'PENDING')
+  current_setting('test.invitee_invitation_id')::uuid
 );
 
 select is(
@@ -111,19 +115,23 @@ select throws_ok(
   'Duplicate active membership is rejected'
 );
 
-select public.invite_team_member(
-  '10000000-0000-0000-0000-0000000000a1',
-  'cancelled@example.com',
-  'PLAYER'
+select set_config(
+  'test.cancelled_invitation_id',
+  public.invite_team_member(
+    '10000000-0000-0000-0000-0000000000a1',
+    'cancelled@example.com',
+    'PLAYER'
+  )::text,
+  true
 );
 select public.cancel_team_invitation(
-  (select id from public.team_invitations where email_normalized = 'cancelled@example.com' and status = 'PENDING')
+  current_setting('test.cancelled_invitation_id')::uuid
 );
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000f1', true);
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000f1","role":"authenticated","email":"cancelled@example.com"}', true);
 select throws_ok(
-  $$select public.accept_team_invitation((select id from public.team_invitations where email_normalized = 'cancelled@example.com'))$$,
+  $$select public.accept_team_invitation(current_setting('test.cancelled_invitation_id')::uuid)$$,
   '22023',
   'INVITATION_NOT_PENDING',
   'Cancelled invitation cannot be accepted'
