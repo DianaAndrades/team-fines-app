@@ -299,3 +299,187 @@ $$;
 
 revoke execute on function public.accept_team_invitation(uuid) from public, anon;
 grant execute on function public.accept_team_invitation(uuid) to authenticated;
+
+create or replace function public.create_rule(
+  p_team_id uuid,
+  p_season_id uuid,
+  p_title text,
+  p_description text,
+  p_default_amount_minor numeric
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_rule_id uuid;
+  v_title text := trim(coalesce(p_title, ''));
+  v_description text := nullif(trim(coalesce(p_description, '')), '');
+begin
+  if auth.uid() is null or not public.is_team_staff(p_team_id) then
+    raise exception 'INSUFFICIENT_PERMISSION' using errcode = '42501';
+  end if;
+
+  if not exists (
+    select 1
+    from public.seasons s
+    where s.id = p_season_id
+      and s.team_id = p_team_id
+      and s.is_active
+  ) then
+    raise exception 'INVALID_ACTIVE_SEASON' using errcode = '22023';
+  end if;
+
+  if length(v_title) not between 1 and 120 then
+    raise exception 'INVALID_RULE_TITLE' using errcode = '22023';
+  end if;
+
+  if v_description is not null and length(v_description) > 500 then
+    raise exception 'INVALID_RULE_DESCRIPTION' using errcode = '22023';
+  end if;
+
+  if p_default_amount_minor is null
+    or p_default_amount_minor <= 0
+    or trunc(p_default_amount_minor) <> p_default_amount_minor then
+    raise exception 'INVALID_RULE_AMOUNT' using errcode = '22023';
+  end if;
+
+  insert into public.rules(
+    team_id,
+    season_id,
+    title,
+    description,
+    default_amount_minor,
+    created_by
+  )
+  values (
+    p_team_id,
+    p_season_id,
+    v_title,
+    v_description,
+    p_default_amount_minor,
+    auth.uid()
+  )
+  returning id into v_rule_id;
+
+  return v_rule_id;
+end;
+$$;
+
+create or replace function public.update_rule(
+  p_rule_id uuid,
+  p_team_id uuid,
+  p_season_id uuid,
+  p_title text,
+  p_description text,
+  p_default_amount_minor numeric
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_title text := trim(coalesce(p_title, ''));
+  v_description text := nullif(trim(coalesce(p_description, '')), '');
+begin
+  if auth.uid() is null or not public.is_team_staff(p_team_id) then
+    raise exception 'INSUFFICIENT_PERMISSION' using errcode = '42501';
+  end if;
+
+  if not exists (
+    select 1
+    from public.rules r
+    where r.id = p_rule_id
+      and r.team_id = p_team_id
+  ) then
+    raise exception 'RULE_NOT_FOUND' using errcode = '22023';
+  end if;
+
+  if not exists (
+    select 1
+    from public.seasons s
+    where s.id = p_season_id
+      and s.team_id = p_team_id
+      and s.is_active
+  ) then
+    raise exception 'INVALID_ACTIVE_SEASON' using errcode = '22023';
+  end if;
+
+  if length(v_title) not between 1 and 120 then
+    raise exception 'INVALID_RULE_TITLE' using errcode = '22023';
+  end if;
+
+  if v_description is not null and length(v_description) > 500 then
+    raise exception 'INVALID_RULE_DESCRIPTION' using errcode = '22023';
+  end if;
+
+  if p_default_amount_minor is null
+    or p_default_amount_minor <= 0
+    or trunc(p_default_amount_minor) <> p_default_amount_minor then
+    raise exception 'INVALID_RULE_AMOUNT' using errcode = '22023';
+  end if;
+
+  update public.rules
+  set season_id = p_season_id,
+      title = v_title,
+      description = v_description,
+      default_amount_minor = p_default_amount_minor,
+      updated_at = now()
+  where id = p_rule_id
+    and team_id = p_team_id;
+end;
+$$;
+
+create or replace function public.set_rule_active(
+  p_rule_id uuid,
+  p_active boolean
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_team_id uuid;
+  v_season_id uuid;
+begin
+  select r.team_id, r.season_id
+  into v_team_id, v_season_id
+  from public.rules r
+  where r.id = p_rule_id
+  for update;
+
+  if not found then
+    raise exception 'RULE_NOT_FOUND' using errcode = '22023';
+  end if;
+
+  if auth.uid() is null or not public.is_team_staff(v_team_id) then
+    raise exception 'INSUFFICIENT_PERMISSION' using errcode = '42501';
+  end if;
+
+  if p_active and not exists (
+    select 1
+    from public.seasons s
+    where s.id = v_season_id
+      and s.team_id = v_team_id
+      and s.is_active
+  ) then
+    raise exception 'INVALID_ACTIVE_SEASON' using errcode = '22023';
+  end if;
+
+  update public.rules
+  set is_active = p_active,
+      updated_at = now()
+  where id = p_rule_id;
+end;
+$$;
+
+revoke execute on function public.create_rule(uuid, uuid, text, text, numeric) from public, anon;
+revoke execute on function public.update_rule(uuid, uuid, uuid, text, text, numeric) from public, anon;
+revoke execute on function public.set_rule_active(uuid, boolean) from public, anon;
+
+grant execute on function public.create_rule(uuid, uuid, text, text, numeric) to authenticated;
+grant execute on function public.update_rule(uuid, uuid, uuid, text, text, numeric) to authenticated;
+grant execute on function public.set_rule_active(uuid, boolean) to authenticated;
