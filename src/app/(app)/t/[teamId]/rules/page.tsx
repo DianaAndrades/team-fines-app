@@ -7,10 +7,12 @@ import {
 import { listRules } from '@/features/rules/service'
 import { getTeamMembership, listMyTeams } from '@/features/teams/service'
 
+const HUNDRED = BigInt(100)
+
 function formatMinorUnits(currencyCode: string, amountMinor: string) {
   const amount = BigInt(amountMinor)
-  const major = amount / 100n
-  const minor = (amount % 100n).toString().padStart(2, '0')
+  const major = amount / HUNDRED
+  const minor = (amount % HUNDRED).toString().padStart(2, '0')
   return `${currencyCode} ${major}.${minor}`
 }
 
