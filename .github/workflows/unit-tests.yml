@@ -1,4 +1,4 @@
-name: Unit tests
+name: Foundation checks
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - feat/mvp-foundation
 
 jobs:
-  test:
+  checks:
     runs-on: ubuntu-latest
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
@@ -27,5 +27,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile --ignore-scripts
 
-      - name: Run unit tests
+      - name: Lint
+        run: ./node_modules/.bin/eslint .
+
+      - name: Typecheck
+        run: ./node_modules/.bin/tsc --noEmit
+
+      - name: Unit tests
         run: ./node_modules/.bin/vitest run
+
+      - name: Build
+        run: ./node_modules/.bin/next build
