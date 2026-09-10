@@ -29,6 +29,10 @@ const teams = [
   { id: 'team-2', name: 'Sunday XI', currencyCode: 'GBP', role: 'PLAYER' },
 ]
 
+function runHomePage() {
+  return Promise.resolve().then(() => HomePage())
+}
+
 describe('root team routing', () => {
   beforeEach(() => {
     requireUser.mockReset()
@@ -47,7 +51,7 @@ describe('root team routing', () => {
   it('sends users without teams to team onboarding', async () => {
     listMyTeams.mockResolvedValue([])
 
-    await expect(HomePage()).rejects.toThrow('REDIRECT:/teams/new')
+    await expect(runHomePage()).rejects.toThrow('REDIRECT:/teams/new')
     expect(getLastActiveTeamId).not.toHaveBeenCalled()
   })
 
@@ -55,7 +59,7 @@ describe('root team routing', () => {
     listMyTeams.mockResolvedValue(teams)
     getLastActiveTeamId.mockResolvedValue('team-2')
 
-    await expect(HomePage()).rejects.toThrow('REDIRECT:/t/team-2')
+    await expect(runHomePage()).rejects.toThrow('REDIRECT:/t/team-2')
     expect(setLastActiveTeam).not.toHaveBeenCalled()
   })
 
@@ -63,7 +67,7 @@ describe('root team routing', () => {
     listMyTeams.mockResolvedValue(teams)
     getLastActiveTeamId.mockResolvedValue('team-missing')
 
-    await expect(HomePage()).rejects.toThrow('REDIRECT:/t/team-1')
+    await expect(runHomePage()).rejects.toThrow('REDIRECT:/t/team-1')
     expect(setLastActiveTeam).toHaveBeenCalledWith('team-1')
   })
 })
