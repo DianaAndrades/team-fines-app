@@ -270,6 +270,7 @@ export async function drainEmailOutbox(limit = 100): Promise<EmailDrainResult> {
 
       const { error: completionError } = await supabase.rpc('complete_email_outbox', {
         p_email_id: email.id,
+        p_attempt_count: email.attempt_count,
         p_provider_message_id: response.data.id,
       })
 
@@ -282,6 +283,7 @@ export async function drainEmailOutbox(limit = 100): Promise<EmailDrainResult> {
       const message = errorMessage(sendError)
       const { error: failureError } = await supabase.rpc('fail_email_outbox', {
         p_email_id: email.id,
+        p_attempt_count: email.attempt_count,
         p_error: message,
       })
 
