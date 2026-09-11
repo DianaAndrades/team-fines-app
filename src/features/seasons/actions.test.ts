@@ -1,13 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { startNewSeason, revalidatePath, redirect } = vi.hoisted(() => ({
+const { startNewSeason, getActiveSeason, revalidatePath, redirect } = vi.hoisted(() => ({
   startNewSeason: vi.fn(),
+  getActiveSeason: vi.fn(),
   revalidatePath: vi.fn(),
   redirect: vi.fn(),
 }))
 
 vi.mock('./rollover', () => ({
   startNewSeason,
+}))
+
+vi.mock('./service', () => ({
+  getActiveSeason,
 }))
 
 vi.mock('next/cache', () => ({
@@ -23,6 +28,7 @@ import { startNewSeasonAction } from './actions'
 describe('season actions', () => {
   beforeEach(() => {
     startNewSeason.mockReset()
+    getActiveSeason.mockReset()
     revalidatePath.mockReset()
     redirect.mockReset()
     startNewSeason.mockResolvedValue('season-new')
