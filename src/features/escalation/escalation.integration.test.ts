@@ -42,15 +42,10 @@ describe('fine escalation concurrency', () => {
 
     expect(ownerError).toBeNull()
     expect(playerError).toBeNull()
-    expect(ownerData.user).not.toBeNull()
-    expect(playerData.user).not.toBeNull()
 
     if (!ownerData.user || !playerData.user) {
-      throw new Error('Escalation integration user setup failed.')
+      throw new Error('Expected admin user fixtures to be created')
     }
-
-    const ownerUser = ownerData.user
-    const playerUser = playerData.user
 
     const { data: team, error: teamError } = await admin
       .from('teams')
@@ -62,9 +57,9 @@ describe('fine escalation concurrency', () => {
       .single()
 
     expect(teamError).toBeNull()
-    expect(team).not.toBeNull()
+
     if (!team) {
-      throw new Error('Escalation integration team setup failed.')
+      throw new Error('Expected team fixture to be created')
     }
 
     const { data: season, error: seasonError } = await admin
@@ -74,16 +69,16 @@ describe('fine escalation concurrency', () => {
       .single()
 
     expect(seasonError).toBeNull()
-    expect(season).not.toBeNull()
+
     if (!season) {
-      throw new Error('Escalation integration season setup failed.')
+      throw new Error('Expected season fixture to be created')
     }
 
     const { data: playerMember, error: memberError } = await admin
       .from('team_members')
       .insert({
         team_id: team.id,
-        user_id: playerUser.id,
+        user_id: playerData.user.id,
         role: 'PLAYER',
         status: 'ACTIVE',
       })
@@ -91,9 +86,9 @@ describe('fine escalation concurrency', () => {
       .single()
 
     expect(memberError).toBeNull()
-    expect(playerMember).not.toBeNull()
+
     if (!playerMember) {
-      throw new Error('Escalation integration player membership setup failed.')
+      throw new Error('Expected player membership fixture to be created')
     }
 
     const { error: seasonMemberError } = await admin.from('season_members').insert({
@@ -113,7 +108,7 @@ describe('fine escalation concurrency', () => {
         original_amount_minor: 500,
         current_amount_minor: 500,
         status: 'PENDING',
-        created_by: ownerUser.id,
+        created_by: ownerData.user.id,
         created_at: '2026-08-27T12:00:00.000Z',
         next_doubling_at: firstDueAt,
       })
@@ -121,9 +116,9 @@ describe('fine escalation concurrency', () => {
       .single()
 
     expect(fineError).toBeNull()
-    expect(fine).not.toBeNull()
+
     if (!fine) {
-      throw new Error('Escalation integration fine setup failed.')
+      throw new Error('Expected fine fixture to be created')
     }
 
     const processorA = createAdminClient()
@@ -144,9 +139,9 @@ describe('fine escalation concurrency', () => {
       .single()
 
     expect(finalFineError).toBeNull()
-    expect(finalFine).not.toBeNull()
+
     if (!finalFine) {
-      throw new Error('Escalation integration final fine lookup failed.')
+      throw new Error('Expected processed fine to exist')
     }
 
     expect(String(finalFine.current_amount_minor)).toBe('2000')
