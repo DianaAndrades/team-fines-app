@@ -44,7 +44,14 @@ beforeAll(async () => {
   ;({ GET } = await import('./route'))
 })
 
-beforeEach(() => {
+beforeEach(async () => {
+  const { error: clearOutboxError } = await admin
+    .from('email_outbox')
+    .delete()
+    .in('status', ['PENDING', 'FAILED', 'SENDING'])
+
+  expect(clearOutboxError).toBeNull()
+
   send.mockReset()
   send.mockImplementation(async () => ({
     data: { id: `resend-${crypto.randomUUID()}` },
