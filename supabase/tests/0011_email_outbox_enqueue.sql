@@ -12,7 +12,9 @@ insert into public.profiles (id, email, display_name)
 values
   ('80000000-0000-0000-0000-000000000001', 'owner@email-outbox.test', 'Owner'),
   ('80000000-0000-0000-0000-000000000002', 'player@email-outbox.test', 'Alex')
-on conflict (id) do nothing;
+on conflict (id) do update
+set email = excluded.email,
+    display_name = excluded.display_name;
 
 insert into public.teams (id, name, currency_code)
 values ('81000000-0000-0000-0000-000000000001', 'Sunday XI', 'EUR');
