@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(18);
+select plan(20);
 
 insert into auth.users (id, email)
 values
@@ -52,6 +52,9 @@ select lives_ok(
   )$$,
   'staff can create a fine that emits a notification'
 );
+
+reset role;
+set local role service_role;
 
 select is(
   (select count(*)::integer from public.notifications where user_id = '70000000-0000-0000-0000-000000000002' and type = 'NEW_FINE'),
@@ -127,11 +130,20 @@ select lives_ok(
   'staff can mark the fine paid'
 );
 
+reset role;
+set local role service_role;
+
 select is(
   (select count(*)::integer from public.notifications where user_id = '70000000-0000-0000-0000-000000000002' and type = 'FINE_PAID'),
   1,
   'payment creates one notification for the fined player'
 );
+
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.sub', '70000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims', '{"sub":"70000000-0000-0000-0000-000000000001","role":"authenticated","email":"owner@notifications.test"}', true);
 
 select public.create_fine(
   '71000000-0000-0000-0000-000000000001',
@@ -158,12 +170,18 @@ select lives_ok(
   'staff can resolve the dispute'
 );
 
+reset role;
+set local role service_role;
+
 select is(
   (select count(*)::integer from public.notifications where user_id = '70000000-0000-0000-0000-000000000002' and type = 'DISPUTE_RESOLVED'),
   1,
   'dispute resolution creates one notification for the player'
 );
 
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.role', 'authenticated', true);
 select set_config('request.jwt.claim.sub', '70000000-0000-0000-0000-000000000002', true);
 select set_config('request.jwt.claims', '{"sub":"70000000-0000-0000-0000-000000000002","role":"authenticated","email":"player@notifications.test"}', true);
 
@@ -188,15 +206,14 @@ select is(
   'another team member cannot read the player personal notifications'
 );
 
+update public.notifications
+set read_at = '2030-01-01 00:00:00+00';
+
+reset role;
+set local role service_role;
+
 select is(
-  (
-    with changed as (
-      update public.notifications
-      set read_at = now()
-      returning id
-    )
-    select count(*)::integer from changed
-  ),
+  (select count(*)::integer from public.notifications where read_at = '2030-01-01 00:00:00+00'),
   0,
   'another team member cannot mark those notifications read'
 );
