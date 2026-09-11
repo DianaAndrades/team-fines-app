@@ -49,7 +49,7 @@ describe('NotificationsPage', () => {
     )
 
     expect(screen.getByRole('heading', { name: /notifications/i })).toBeInTheDocument()
-    expect(screen.getByText('New fine')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'New fine', level: 2 })).toBeInTheDocument()
     expect(screen.getByText('Late to training')).toBeInTheDocument()
     expect(screen.getByText('Fine paid')).toBeInTheDocument()
     expect(screen.getByText('Unread')).toBeInTheDocument()
