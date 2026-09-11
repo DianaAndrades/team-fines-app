@@ -107,11 +107,13 @@ function currencySymbol(currencyCode: string) {
 }
 
 function formatMinorAmount(currencyCode: string, amountMinor: string) {
+  const zero = BigInt(0)
+  const hundred = BigInt(100)
   const amount = BigInt(amountMinor)
-  const negative = amount < 0n
+  const negative = amount < zero
   const absolute = negative ? -amount : amount
-  const major = absolute / 100n
-  const minor = (absolute % 100n).toString().padStart(2, '0')
+  const major = absolute / hundred
+  const minor = (absolute % hundred).toString().padStart(2, '0')
   const symbol = currencySymbol(currencyCode)
   const sign = negative ? '-' : ''
 
