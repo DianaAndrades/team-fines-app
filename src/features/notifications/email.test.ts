@@ -85,6 +85,7 @@ describe('email outbox dispatcher', () => {
     expect(options).toEqual({ idempotencyKey: 'email:new-fine:fine-1' })
     expect(rpc).toHaveBeenCalledWith('complete_email_outbox', {
       p_email_id: 'email-1',
+      p_attempt_count: 1,
       p_provider_message_id: 'resend-1',
     })
   })
@@ -160,6 +161,7 @@ describe('email outbox dispatcher', () => {
 
     expect(rpc).toHaveBeenCalledWith('complete_email_outbox', {
       p_email_id: 'email-4',
+      p_attempt_count: 2,
       p_provider_message_id: 'resend-4',
     })
   })
@@ -186,6 +188,7 @@ describe('email outbox dispatcher', () => {
 
     expect(rpc).toHaveBeenCalledWith('fail_email_outbox', {
       p_email_id: 'email-5',
+      p_attempt_count: 3,
       p_error: 'provider unavailable',
     })
   })
