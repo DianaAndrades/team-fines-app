@@ -8,6 +8,13 @@ const { createAdminClient, rpc, send } = vi.hoisted(() => ({
 }))
 
 vi.mock('server-only', () => ({}))
+vi.mock('@/lib/env', () => ({
+  env: {
+    NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
+    RESEND_API_KEY: 're_test',
+    RESEND_FROM_EMAIL: 'Team Fines <fines@example.com>',
+  },
+}))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 vi.mock('resend', () => ({
   Resend: vi.fn(() => ({ emails: { send } })),
