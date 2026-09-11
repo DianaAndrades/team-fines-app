@@ -17,7 +17,9 @@ vi.mock('@/lib/env', () => ({
 }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient }))
 vi.mock('resend', () => ({
-  Resend: vi.fn(() => ({ emails: { send } })),
+  Resend: class {
+    emails = { send }
+  },
 }))
 
 import { drainEmailOutbox } from './email'
